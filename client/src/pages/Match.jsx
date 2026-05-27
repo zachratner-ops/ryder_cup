@@ -248,11 +248,11 @@ export default function Match({ playerId, isAdmin }) {
     return '';
   }
 
-  // Per-team tab: 4-player grid with carrier highlighted
+  // Per-team tab: 4-player grid with carrier highlighted (stroke play — no winner column, no summary row)
   function renderYBTeamTab(team) {
     const tabIds = match[team]?.playerIds || [];
     const teamColor = team === 'teamA' ? 'var(--teamA)' : 'var(--teamB)';
-    const gridStyle = { gridTemplateColumns: `28px repeat(${tabIds.length}, 1fr) 26px` };
+    const gridStyle = { gridTemplateColumns: `28px repeat(${tabIds.length}, 1fr)` };
 
     return (
       <div className={styles.scorecardGrid}>
@@ -264,17 +264,14 @@ export default function Match({ playerId, isAdmin }) {
               {players[id]?.name?.split(' ')[0] || id}
             </span>
           ))}
-          <span />
         </div>
 
         {Array.from({ length: 18 }, (_, i) => i + 1).map(h => {
           const hd = holeData[h] || {};
-          const winner = hd.holeWinner;
           const carrierForHole = getCarrier(h, team);
           const holePar = courseHoles[h]?.par;
-          const isLastPlayed = !!hd.holeWinner && !holeData[h + 1]?.holeWinner;
 
-          const holeRow = (
+          return (
             <div key={`hole-${h}`} style={gridStyle} className={`${styles.scRow} ${h === currentHole ? styles.scCurrent : ''}`}>
               <span className={styles.scHole}>{h}</span>
               {tabIds.map(id => {
@@ -291,63 +288,26 @@ export default function Match({ playerId, isAdmin }) {
                   </span>
                 );
               })}
-              <span className={styles.scWinner}>
-                {winner === 'half' ? <span className={styles.halfMark}>½</span> : winner ? <TeamLogo teamId={winner} size={18} /> : null}
-              </span>
             </div>
           );
-
-          if (!isLastPlayed) return holeRow;
-
-          // Summary row: this team's cumulative YB net + lead indicator
-          let cumA = 0, cumB = 0;
-          for (let hh = 1; hh <= h; hh++) {
-            const hhd = holeData[hh];
-            if (hhd?.ybNetA != null) cumA += hhd.ybNetA;
-            if (hhd?.ybNetB != null) cumB += hhd.ybNetB;
-          }
-          const tabCum = team === 'teamA' ? cumA : cumB;
-          const diff = cumA - cumB;
-          const diffStr = diff === 0 ? 'Tied'
-            : diff < 0 ? `${tournament?.teamA?.name || 'A'} −${Math.abs(diff)}`
-            : `${tournament?.teamB?.name || 'B'} −${Math.abs(diff)}`;
-          const diffColor = diff < 0 ? 'var(--teamA)' : diff > 0 ? 'var(--teamB)' : 'var(--text-muted)';
-
-          return [
-            holeRow,
-            <div key={`yb-sum-${h}`} style={gridStyle} className={`${styles.scRow} ${styles.scTotalRow}`}>
-              <span className={styles.scHole} style={{ fontSize: 10, color: 'var(--yellow)' }}>🟡</span>
-              {tabIds.map((id, idx) => (
-                <span key={id} className={styles.scScore}>
-                  <span className={styles.dotSlot} />
-                  <span className={styles.scorePill} style={{ color: teamColor, fontWeight: 700 }}>
-                    {idx === 0 ? tabCum : ''}
-                  </span>
-                  <span className={styles.dotSlot} />
-                </span>
-              ))}
-              <span style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: diffColor }}>
-                {diffStr}
-              </span>
-            </div>,
-          ];
         })}
       </div>
     );
   }
 
-  // Score tab: compact Hole | NW | NE | W with persistent totals
+  // Score tab: Hole | NW | NE | running cumulative diff
   function renderYBScoreTab() {
+    // Compute final totals for the persistent totals row
     let cumA = 0, cumB = 0;
     for (let h = 1; h <= 18; h++) {
       const hd = holeData[h];
       if (hd?.ybNetA != null) cumA += hd.ybNetA;
       if (hd?.ybNetB != null) cumB += hd.ybNetB;
     }
-    const diff = cumA - cumB;
+    const totalDiff = cumA - cumB;
     const teamAName = tournament?.teamA?.name || 'Team A';
     const teamBName = tournament?.teamB?.name || 'Team B';
-    const gridStyle = { gridTemplateColumns: '28px 1fr 1fr 26px' };
+    const gridStyle = { gridTemplateColumns: '28px 1fr 1fr 36px' };
 
     return (
       <div className={styles.scorecardGrid}>
@@ -360,12 +320,29 @@ export default function Match({ playerId, isAdmin }) {
 
         {Array.from({ length: 18 }, (_, i) => i + 1).map(h => {
           const hd = holeData[h] || {};
-          const winner = hd.holeWinner;
           const carrierAId = getCarrier(h, 'teamA');
           const carrierBId = getCarrier(h, 'teamB');
           const scoreA = hd[carrierAId];
           const scoreB = hd[carrierBId];
           const holePar = courseHoles[h]?.par;
+
+          // Running cumulative diff through this hole
+          let runA = 0, runB = 0;
+          for (let hh = 1; hh <= h; hh++) {
+            const hhd = holeData[hh];
+            if (hhd?.ybNetA != null) runA += hhd.ybNetA;
+            if (hhd?.ybNetB != null) runB += hhd.ybNetB;
+          }
+          const holePlayed = hd.ybNetA != null && hd.ybNetB != null;
+          const runDiff = runA - runB;
+          const diffLabel = !holePlayed ? ''
+            : runDiff === 0 ? 'E'
+            : runDiff < 0 ? `−${Math.abs(runDiff)}`
+            : `+${Math.abs(runDiff)}`;
+          const diffColor = !holePlayed ? 'var(--text-muted)'
+            : runDiff < 0 ? 'var(--teamA)'
+            : runDiff > 0 ? 'var(--teamB)'
+            : 'var(--text-muted)';
 
           return (
             <div key={h} style={gridStyle} className={`${styles.scRow} ${h === currentHole ? styles.scCurrent : ''}`}>
@@ -386,8 +363,8 @@ export default function Match({ playerId, isAdmin }) {
                   <span className={styles.dotSlot} />
                 </span>
               ))}
-              <span className={styles.scWinner}>
-                {winner === 'half' ? <span className={styles.halfMark}>½</span> : winner ? <TeamLogo teamId={winner} size={18} /> : null}
+              <span style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: diffColor, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {diffLabel}
               </span>
             </div>
           );
@@ -403,8 +380,8 @@ export default function Match({ playerId, isAdmin }) {
               <span className={styles.dotSlot} />
             </span>
           ))}
-          <span style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: diff < 0 ? 'var(--teamA)' : diff > 0 ? 'var(--teamB)' : 'var(--text-muted)' }}>
-            {cumA === 0 && cumB === 0 ? '' : diff === 0 ? '=' : diff < 0 ? `−${Math.abs(diff)}` : `+${Math.abs(diff)}`}
+          <span style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: totalDiff < 0 ? 'var(--teamA)' : totalDiff > 0 ? 'var(--teamB)' : 'var(--text-muted)' }}>
+            {cumA === 0 && cumB === 0 ? '' : totalDiff === 0 ? 'E' : totalDiff < 0 ? `−${Math.abs(totalDiff)}` : `+${Math.abs(totalDiff)}`}
           </span>
         </div>
       </div>
