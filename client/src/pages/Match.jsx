@@ -33,7 +33,6 @@ export default function Match({ playerId }) {
   const [players, setPlayers] = useState({});
   const [courseHoles, setCourseHoles] = useState({});
   const [currentHole, setCurrentHole] = useState(1);
-  const [ybTab, setYbTab] = useState(null); // null = auto-follows player's team
   const [entry, setEntry] = useState({ gross: '', fairwayHit: null, gir: false, putts: '' });
   const [justSaved, setJustSaved] = useState(false);
   const initialJumped = useRef(false);
@@ -86,7 +85,6 @@ export default function Match({ playerId }) {
     : playerId && match.teamB?.playerIds?.includes(playerId) ? 'teamB'
     : 'teamA';
   const myYBCarrier = isYellowBall ? getCarrier(currentHole, myTeam) === playerId : false;
-  const activeTab = ybTab || myTeam;
 
   const allPlayerIds = [...(match.teamA?.playerIds || []), ...(match.teamB?.playerIds || [])];
   const myAllocation = match.strokeAllocation?.[playerId]?.holes || [];
@@ -183,7 +181,7 @@ export default function Match({ playerId }) {
         holesPlayed++;
       }
       if (holesPlayed === 0) return '🟡 Yellow Ball';
-      const diff = cumA - cumB; // negative = A winning (lower is better in stroke play)
+      const diff = cumA - cumB; // negative = A winning (lower is better)
       if (diff === 0) return `🟡 Tied thru ${holesPlayed}`;
       const margin = Math.abs(diff);
       const leadTeam = diff < 0 ? 'teamA' : 'teamB';
@@ -193,62 +191,97 @@ export default function Match({ playerId }) {
     return computeMatchStatus(holeData, match.teamA?.playerIds, match.teamB?.playerIds);
   })();
 
-  // Yellow ball scorecard — two tabs, one per team
+  // ─── Yellow ball scorecard ────────────────────────────────────────────────
+  // Single 4-column view: Hole | NW | NE | Winner
+  // Each cell shows the carrier's gross score + carrier name beneath + score shapes
+  // A persistent totals row is always pinned at the bottom.
   function renderYBScorecard() {
-    const tabIds = match[activeTab]?.playerIds || [];
-    const teamColor = activeTab === 'teamA' ? 'var(--teamA)' : 'var(--teamB)';
+    // Cumulative YB totals across all completed holes
+    let cumA = 0, cumB = 0;
+    for (let h = 1; h <= 18; h++) {
+      const hd = holeData[h];
+      if (hd?.ybNetA != null) cumA += hd.ybNetA;
+      if (hd?.ybNetB != null) cumB += hd.ybNetB;
+    }
+    const diff = cumA - cumB; // negative = A winning (lower strokes is better)
+    const teamAName = tournament?.teamA?.name || 'Team A';
+    const teamBName = tournament?.teamB?.name || 'Team B';
+    const gridStyle = { gridTemplateColumns: '28px 1fr 1fr 26px' };
+
+    function scoreShape(gross, par) {
+      if (!gross || !par) return '';
+      const d = gross - par;
+      if (d <= -2) return styles.scoreEagle;
+      if (d === -1) return styles.scoreBirdie;
+      if (d === 1) return styles.scoreBogey;
+      if (d >= 2) return styles.scoreDouble;
+      return '';
+    }
 
     return (
       <div className={styles.scorecardGrid}>
-        {/* Header: player first names in team color */}
-        <div
-          className={`${styles.scRow} ${styles.scHeader}`}
-          style={{ gridTemplateColumns: `28px repeat(${tabIds.length}, 1fr) 26px` }}
-        >
+        {/* Header: team names */}
+        <div className={`${styles.scRow} ${styles.scHeader}`} style={gridStyle}>
           <span />
-          {tabIds.map(id => (
-            <span key={id} style={{ textAlign: 'center', color: teamColor, fontWeight: 700, fontSize: '13px' }}>
-              {players[id]?.name?.split(' ')[0] || id}
-            </span>
-          ))}
+          <span style={{ textAlign: 'center', color: 'var(--teamA)', fontWeight: 700, fontSize: '13px' }}>
+            {teamAName}
+          </span>
+          <span style={{ textAlign: 'center', color: 'var(--teamB)', fontWeight: 700, fontSize: '13px' }}>
+            {teamBName}
+          </span>
           <span />
         </div>
 
         {Array.from({ length: 18 }, (_, i) => i + 1).map(h => {
           const hd = holeData[h] || {};
           const winner = hd.holeWinner;
-          const ybCarrierForTab = getCarrier(h, activeTab);
-          const gridStyle = { gridTemplateColumns: `28px repeat(${tabIds.length}, 1fr) 26px` };
-          const isLastPlayed = !!hd.holeWinner && !holeData[h + 1]?.holeWinner;
+          const carrierAId = getCarrier(h, 'teamA');
+          const carrierBId = getCarrier(h, 'teamB');
+          const scoreA = hd[carrierAId];
+          const scoreB = hd[carrierBId];
+          const holePar = courseHoles[h]?.par;
 
-          const holeRow = (
+          return (
             <div
-              key={`hole-${h}`}
+              key={h}
               style={gridStyle}
               className={`${styles.scRow} ${h === currentHole ? styles.scCurrent : ''}`}
             >
               <span className={styles.scHole}>{h}</span>
-              {tabIds.map(id => {
-                const s = hd[id];
-                const isCarrier = ybCarrierForTab === id;
-                const holePar = courseHoles[h]?.par;
-                const scoreDiff = (s?.gross && holePar) ? s.gross - holePar : null;
-                const shapeClass = scoreDiff === null ? ''
-                  : scoreDiff <= -2 ? styles.scoreEagle
-                  : scoreDiff === -1 ? styles.scoreBirdie
-                  : scoreDiff === 1 ? styles.scoreBogey
-                  : scoreDiff >= 2 ? styles.scoreDouble
-                  : '';
-                return (
-                  <span key={id} className={styles.scScore}>
-                    <span className={styles.dotSlot} />
-                    <span className={`${styles.scorePill} ${isCarrier ? styles.ybCarrier : ''} ${shapeClass}`}>
-                      {s?.gross ?? '—'}
-                    </span>
-                    <span className={styles.dotSlot} />
+
+              {/* Team A carrier score */}
+              <span className={styles.scScore}>
+                <span className={styles.dotSlot} />
+                <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  <span className={`${styles.scorePill} ${scoreA?.gross ? styles.ybCarrier : ''} ${scoreShape(scoreA?.gross, holePar)}`}>
+                    {scoreA?.gross ?? '—'}
                   </span>
-                );
-              })}
+                  {carrierAId && (
+                    <span style={{ fontSize: 9, color: 'var(--text-muted)', lineHeight: 1 }}>
+                      {players[carrierAId]?.name?.split(' ')[0] || ''}
+                    </span>
+                  )}
+                </span>
+                <span className={styles.dotSlot} />
+              </span>
+
+              {/* Team B carrier score */}
+              <span className={styles.scScore}>
+                <span className={styles.dotSlot} />
+                <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  <span className={`${styles.scorePill} ${scoreB?.gross ? styles.ybCarrier : ''} ${scoreShape(scoreB?.gross, holePar)}`}>
+                    {scoreB?.gross ?? '—'}
+                  </span>
+                  {carrierBId && (
+                    <span style={{ fontSize: 9, color: 'var(--text-muted)', lineHeight: 1 }}>
+                      {players[carrierBId]?.name?.split(' ')[0] || ''}
+                    </span>
+                  )}
+                </span>
+                <span className={styles.dotSlot} />
+              </span>
+
+              {/* Winner */}
               <span className={styles.scWinner}>
                 {winner === 'half'
                   ? <span className={styles.halfMark}>½</span>
@@ -256,44 +289,35 @@ export default function Match({ playerId }) {
               </span>
             </div>
           );
-
-          if (!isLastPlayed) return holeRow;
-
-          // Summary row: cumulative YB net + running lead
-          let cumA = 0, cumB = 0;
-          for (let hh = 1; hh <= h; hh++) {
-            const hhd = holeData[hh];
-            if (hhd?.ybNetA != null) cumA += hhd.ybNetA;
-            if (hhd?.ybNetB != null) cumB += hhd.ybNetB;
-          }
-          const diff = cumA - cumB; // negative = A winning
-          const tabCum = activeTab === 'teamA' ? cumA : cumB;
-          const diffStr = diff === 0
-            ? 'Tied'
-            : diff < 0
-              ? `${tournament?.teamA?.name || 'A'} −${Math.abs(diff)}`
-              : `${tournament?.teamB?.name || 'B'} −${Math.abs(diff)}`;
-          const diffColor = diff < 0 ? 'var(--teamA)' : diff > 0 ? 'var(--teamB)' : 'var(--text-muted)';
-
-          return [
-            holeRow,
-            <div key={`yb-sum-${h}`} style={gridStyle} className={`${styles.scRow} ${styles.scTotalRow}`}>
-              <span className={styles.scHole} style={{ fontSize: 10, color: 'var(--yellow)' }}>🟡</span>
-              {tabIds.map((id, idx) => (
-                <span key={id} className={styles.scScore}>
-                  <span className={styles.dotSlot} />
-                  <span className={styles.scorePill} style={{ color: teamColor, fontWeight: 700 }}>
-                    {idx === 0 ? tabCum : ''}
-                  </span>
-                  <span className={styles.dotSlot} />
-                </span>
-              ))}
-              <span style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: diffColor }}>
-                {diffStr}
-              </span>
-            </div>,
-          ];
         })}
+
+        {/* Persistent cumulative totals — always visible */}
+        <div style={gridStyle} className={`${styles.scRow} ${styles.scTotalRow}`}>
+          <span className={styles.scHole} style={{ fontSize: 10, color: 'var(--yellow)' }}>🟡</span>
+          <span className={styles.scScore}>
+            <span className={styles.dotSlot} />
+            <span className={styles.scorePill} style={{ color: 'var(--teamA)', fontWeight: 700 }}>
+              {cumA > 0 ? cumA : '—'}
+            </span>
+            <span className={styles.dotSlot} />
+          </span>
+          <span className={styles.scScore}>
+            <span className={styles.dotSlot} />
+            <span className={styles.scorePill} style={{ color: 'var(--teamB)', fontWeight: 700 }}>
+              {cumB > 0 ? cumB : '—'}
+            </span>
+            <span className={styles.dotSlot} />
+          </span>
+          <span style={{
+            textAlign: 'center', fontSize: 10, fontWeight: 700,
+            color: diff < 0 ? 'var(--teamA)' : diff > 0 ? 'var(--teamB)' : 'var(--text-muted)',
+          }}>
+            {cumA === 0 && cumB === 0 ? ''
+              : diff === 0 ? '='
+              : diff < 0 ? `−${Math.abs(diff)}`
+              : `+${Math.abs(diff)}`}
+          </span>
+        </div>
       </div>
     );
   }
@@ -434,30 +458,7 @@ export default function Match({ playerId }) {
       <div className={styles.scorecard}>
         <div className={styles.sectionLabel}>Scorecard</div>
 
-        {isYellowBall ? (
-          <>
-            {/* Team tabs */}
-            <div className={styles.ybTabs}>
-              {['teamA', 'teamB'].map(team => (
-                <button
-                  key={team}
-                  className={`${styles.ybTabBtn} ${activeTab === team ? styles.ybTabActive : ''}`}
-                  style={activeTab === team ? {
-                    background: team === 'teamA'
-                      ? 'color-mix(in srgb, var(--teamA) 12%, transparent)'
-                      : 'color-mix(in srgb, var(--teamB) 12%, transparent)',
-                    color: team === 'teamA' ? 'var(--teamA)' : 'var(--teamB)',
-                    borderColor: team === 'teamA' ? 'var(--teamA)' : 'var(--teamB)',
-                  } : {}}
-                  onClick={() => setYbTab(team)}
-                >
-                  {team === 'teamA' ? (tournament?.teamA?.name || 'Team A') : (tournament?.teamB?.name || 'Team B')}
-                </button>
-              ))}
-            </div>
-            {renderYBScorecard()}
-          </>
-        ) : (
+        {isYellowBall ? renderYBScorecard() : (
           <div className={styles.scorecardGrid}>
             {/* Compact single header row */}
             <div
