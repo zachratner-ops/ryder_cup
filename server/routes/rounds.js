@@ -54,6 +54,7 @@ router.post('/:roundId/start', async (req, res) => {
         teamA: { playerIds: teamAIds },
         teamB: { playerIds: teamBIds },
         strokeAllocation,
+        ...(round.format === 'yellowball' && carrierOrder ? { carrierOrder } : {}),
         status: 'active',
         result: null,
       };

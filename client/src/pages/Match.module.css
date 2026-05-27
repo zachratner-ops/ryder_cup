@@ -367,6 +367,35 @@
   font-weight: 700;
 }
 
+/* Yellow ball carrier pill */
+.ybCarrier {
+  background: color-mix(in srgb, var(--yellow) 22%, transparent);
+  color: #92620a;
+  font-weight: 700;
+  border-color: var(--yellow);
+}
+
+/* Yellow ball entry banners */
+.ybBannerCarrying {
+  background: color-mix(in srgb, var(--yellow) 18%, transparent);
+  color: #92620a;
+  border: 1px solid var(--yellow);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.ybBannerWatching {
+  background: var(--surface2);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 13px;
+  text-align: center;
+}
+
 .scWinner {
   text-align: center;
   display: flex;
@@ -378,6 +407,28 @@
   font-weight: 700;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+/* Yellow Ball scorecard tabs */
+.ybTabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ybTabBtn {
+  flex: 1;
+  padding: 8px 14px;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.ybTabActive {
+  font-weight: 700;
 }
 
 .bottomPad { height: 20px; }

@@ -19,6 +19,10 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
   // "edit" view = round settings; "manage" = pairings/start/close
   const [view, setView] = useState('manage'); // 'manage' | 'edit'
 
+  // Yellow ball carrier order (4 slots per team, repeats across 18 holes)
+  const [carrierOrderA, setCarrierOrderA] = useState(['', '', '', '']);
+  const [carrierOrderB, setCarrierOrderB] = useState(['', '', '', '']);
+
   // Edit fields for a setup round
   const [editFormat, setEditFormat] = useState('fourball');
   const [editPoints, setEditPoints] = useState('1');
@@ -98,6 +102,25 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
   async function startRound() {
     await call(`/api/rounds/${selectedRound}/start`, { matches: pairings }, 'Round started!');
     setPairings([]);
+  }
+
+  async function startYellowBall() {
+    const allA = teamAPlayers.map(([id]) => id);
+    const allB = teamBPlayers.map(([id]) => id);
+    const matchId = `match_${Date.now()}`;
+    const result = await call(`/api/rounds/${selectedRound}/start`, {
+      matches: [{ matchId, teamA: { playerIds: allA }, teamB: { playerIds: allB } }],
+      carrierOrder: { teamA: carrierOrderA, teamB: carrierOrderB },
+    }, 'Yellow Ball round started!');
+    return result;
+  }
+
+  function updateCarrierSlot(team, slot, playerId) {
+    if (team === 'teamA') {
+      setCarrierOrderA(prev => { const n = [...prev]; n[slot] = playerId; return n; });
+    } else {
+      setCarrierOrderB(prev => { const n = [...prev]; n[slot] = playerId; return n; });
+    }
   }
 
   async function closeRound() {
@@ -279,7 +302,7 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
                 </>
               )}
 
-              {round.status === 'setup' && (
+              {round.status === 'setup' && round.format !== 'yellowball' && (
                 <>
                   <div className={styles.pairingsHeader}>Pairings</div>
                   {pairings.map((p, i) => (
@@ -301,6 +324,43 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
                   <button className={styles.addRound} onClick={addPairing}>+ Add pairing</button>
                   <button className={styles.submitBtn} onClick={startRound} disabled={busy || !pairings.length}>
                     {busy ? 'Starting…' : 'Start Round'}
+                  </button>
+                </>
+              )}
+
+              {round.status === 'setup' && round.format === 'yellowball' && (
+                <>
+                  <div className={styles.pairingsHeader}>🟡 Carrier Rotation</div>
+                  <p className={styles.ybHint}>Set the order each team's players carry the yellow ball. Repeats across all 18 holes.</p>
+
+                  {[
+                    { team: 'teamA', label: tournament.teamA?.name, color: 'var(--teamA)', players: teamAPlayers, order: carrierOrderA },
+                    { team: 'teamB', label: tournament.teamB?.name, color: 'var(--teamB)', players: teamBPlayers, order: carrierOrderB },
+                  ].map(({ team, label, color, players: teamPlayers, order }) => (
+                    <div key={team} className={styles.pairingCard}>
+                      <div className={styles.pairingTeam} style={{ color }}>{label}</div>
+                      {[0, 1, 2, 3].map(slot => (
+                        <div key={slot} className={styles.carrierSlotRow}>
+                          <span className={styles.carrierSlotNum}>Slot {slot + 1}</span>
+                          <select
+                            value={order[slot] || ''}
+                            onChange={e => updateCarrierSlot(team, slot, e.target.value)}
+                            className={styles.carrierSlotSelect}
+                          >
+                            <option value="">— pick player —</option>
+                            {teamPlayers.map(([id, pl]) => <option key={id} value={id}>{pl.name}</option>)}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+
+                  <button
+                    className={styles.submitBtn}
+                    onClick={startYellowBall}
+                    disabled={busy || carrierOrderA.some(v => !v) || carrierOrderB.some(v => !v)}
+                  >
+                    {busy ? 'Starting…' : 'Start Yellow Ball Round'}
                   </button>
                 </>
               )}

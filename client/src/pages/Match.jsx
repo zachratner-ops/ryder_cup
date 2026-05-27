@@ -27,10 +27,13 @@ export default function Match({ playerId }) {
   const { matchId } = useParams();
   const navigate = useNavigate();
   const [match, setMatch] = useState(null);
+  const [round, setRound] = useState(null);
+  const [tournament, setTournament] = useState(null);
   const [holeData, setHoleData] = useState({});
   const [players, setPlayers] = useState({});
   const [courseHoles, setCourseHoles] = useState({});
   const [currentHole, setCurrentHole] = useState(1);
+  const [ybTab, setYbTab] = useState(null); // null = auto-follows player's team
   const [entry, setEntry] = useState({ gross: '', fairwayHit: null, gir: false, putts: '' });
   const [justSaved, setJustSaved] = useState(false);
   const initialJumped = useRef(false);
@@ -40,8 +43,16 @@ export default function Match({ playerId }) {
     const u2 = onValue(ref(db, `holes/${matchId}`), (s) => setHoleData(s.val() || {}));
     const u3 = onValue(ref(db, 'players'), (s) => setPlayers(s.val() || {}));
     const u4 = onValue(ref(db, 'course/holes'), (s) => setCourseHoles(s.val() || {}));
-    return () => { u1(); u2(); u3(); u4(); };
+    const u5 = onValue(ref(db, 'tournament'), (s) => setTournament(s.val()));
+    return () => { u1(); u2(); u3(); u4(); u5(); };
   }, [matchId]);
+
+  // Load round data once match is known (needed for yellow ball carrier order)
+  useEffect(() => {
+    if (!match?.roundId) return;
+    const u = onValue(ref(db, `rounds/${match.roundId}`), (s) => setRound(s.val()));
+    return u;
+  }, [match?.roundId]);
 
   // Auto-advance to first unplayed hole on initial load
   useEffect(() => {
@@ -61,13 +72,32 @@ export default function Match({ playerId }) {
 
   if (!match) return <div className={styles.loading}>Loading match…</div>;
 
+  // Yellow ball helpers
+  const isYellowBall = match.format === 'yellowball';
+  const carrierOrder = match.carrierOrder || round?.carrierOrder;
+  function getCarrier(holeNum, team) {
+    const order = carrierOrder?.[team];
+    if (!order?.length) return null;
+    return order[(holeNum - 1) % order.length];
+  }
+  const ybCarrierA = isYellowBall ? getCarrier(currentHole, 'teamA') : null;
+  const ybCarrierB = isYellowBall ? getCarrier(currentHole, 'teamB') : null;
+  const myTeam = playerId && match.teamA?.playerIds?.includes(playerId) ? 'teamA'
+    : playerId && match.teamB?.playerIds?.includes(playerId) ? 'teamB'
+    : 'teamA';
+  const myYBCarrier = isYellowBall ? getCarrier(currentHole, myTeam) === playerId : false;
+  const activeTab = ybTab || myTeam;
+
   const allPlayerIds = [...(match.teamA?.playerIds || []), ...(match.teamB?.playerIds || [])];
   const myAllocation = match.strokeAllocation?.[playerId]?.holes || [];
   const hole = courseHoles[currentHole] || {};
   const isPar3 = hole.par === 3;
   const receiveStroke = myAllocation.includes(currentHole);
   const gross = parseInt(entry.gross) || 0;
-  const net = gross > 0 ? gross - (receiveStroke ? 1 : 0) : null;
+  // Yellow ball has no handicap — net equals gross
+  const net = isYellowBall
+    ? (gross > 0 ? gross : null)
+    : gross > 0 ? gross - (receiveStroke ? 1 : 0) : null;
 
   const isMyMatch = allPlayerIds.includes(playerId);
   const roundComplete = match.status === 'complete';
@@ -75,9 +105,14 @@ export default function Match({ playerId }) {
   const myHoleScore = holeData[currentHole]?.[playerId];
   const iSubmitted = !!myHoleScore?.gross;
   const holeComplete = !!holeData[currentHole]?.holeWinner;
-  const waitingOn = iSubmitted && !holeComplete
-    ? allPlayerIds.filter(id => id !== playerId && !holeData[currentHole]?.[id]?.gross)
-    : [];
+  // Yellow ball: only wait on the two carriers to resolve the hole winner
+  const waitingOn = (() => {
+    if (!iSubmitted || holeComplete) return [];
+    if (isYellowBall) {
+      return [ybCarrierA, ybCarrierB].filter(id => id && id !== playerId && !holeData[currentHole]?.[id]?.gross);
+    }
+    return allPlayerIds.filter(id => id !== playerId && !holeData[currentHole]?.[id]?.gross);
+  })();
 
   async function submitHole() {
     if (!gross || entry.putts === '') return;
@@ -107,17 +142,28 @@ export default function Match({ playerId }) {
 
     const teamAIds = match.teamA?.playerIds || [];
     const teamBIds = match.teamB?.playerIds || [];
+    const holeRef = ref(db, `holes/${matchId}/${holeNum}`);
 
+    if (isYellowBall) {
+      // Only the designated carrier's score counts per hole
+      const carrierAId = getCarrier(holeNum, 'teamA');
+      const carrierBId = getCarrier(holeNum, 'teamB');
+      const ybNetA = scores[carrierAId]?.net;
+      const ybNetB = scores[carrierBId]?.net;
+      if (ybNetA == null || ybNetB == null) return; // wait for both carriers
+      const winner = ybNetA < ybNetB ? 'teamA' : ybNetA > ybNetB ? 'teamB' : 'half';
+      await update(holeRef, { holeWinner: winner, ybNetA, ybNetB });
+      return;
+    }
+
+    // Four-ball / foursomes / singles: best net per team
     const teamANets = teamAIds.map((id) => scores[id]?.net).filter((n) => n != null);
     const teamBNets = teamBIds.map((id) => scores[id]?.net).filter((n) => n != null);
-
     if (teamANets.length < teamAIds.length || teamBNets.length < teamBIds.length) return;
 
     const bestA = Math.min(...teamANets);
     const bestB = Math.min(...teamBNets);
     const winner = bestA < bestB ? 'teamA' : bestA > bestB ? 'teamB' : 'half';
-
-    const holeRef = ref(db, `holes/${matchId}/${holeNum}`);
     const status = computeMatchStatus(
       { ...holeData, [holeNum]: { holeWinner: winner } },
       teamAIds,
@@ -126,7 +172,131 @@ export default function Match({ playerId }) {
     await update(holeRef, { holeWinner: winner, matchStatus: status });
   }
 
-  const matchStatus = computeMatchStatus(holeData, match.teamA?.playerIds, match.teamB?.playerIds);
+  const matchStatus = (() => {
+    if (isYellowBall) {
+      let cumA = 0, cumB = 0, holesPlayed = 0;
+      for (let h = 1; h <= 18; h++) {
+        const hd = holeData[h];
+        if (hd?.ybNetA == null || hd?.ybNetB == null) break;
+        cumA += hd.ybNetA;
+        cumB += hd.ybNetB;
+        holesPlayed++;
+      }
+      if (holesPlayed === 0) return '🟡 Yellow Ball';
+      const diff = cumA - cumB; // negative = A winning (lower is better in stroke play)
+      if (diff === 0) return `🟡 Tied thru ${holesPlayed}`;
+      const margin = Math.abs(diff);
+      const leadTeam = diff < 0 ? 'teamA' : 'teamB';
+      const leadName = tournament?.[leadTeam]?.name ?? leadTeam;
+      return `🟡 ${leadName} leads by ${margin} thru ${holesPlayed}`;
+    }
+    return computeMatchStatus(holeData, match.teamA?.playerIds, match.teamB?.playerIds);
+  })();
+
+  // Yellow ball scorecard — two tabs, one per team
+  function renderYBScorecard() {
+    const tabIds = match[activeTab]?.playerIds || [];
+    const teamColor = activeTab === 'teamA' ? 'var(--teamA)' : 'var(--teamB)';
+
+    return (
+      <div className={styles.scorecardGrid}>
+        {/* Header: player first names in team color */}
+        <div
+          className={`${styles.scRow} ${styles.scHeader}`}
+          style={{ gridTemplateColumns: `28px repeat(${tabIds.length}, 1fr) 26px` }}
+        >
+          <span />
+          {tabIds.map(id => (
+            <span key={id} style={{ textAlign: 'center', color: teamColor, fontWeight: 700, fontSize: '13px' }}>
+              {players[id]?.name?.split(' ')[0] || id}
+            </span>
+          ))}
+          <span />
+        </div>
+
+        {Array.from({ length: 18 }, (_, i) => i + 1).map(h => {
+          const hd = holeData[h] || {};
+          const winner = hd.holeWinner;
+          const ybCarrierForTab = getCarrier(h, activeTab);
+          const gridStyle = { gridTemplateColumns: `28px repeat(${tabIds.length}, 1fr) 26px` };
+          const isLastPlayed = !!hd.holeWinner && !holeData[h + 1]?.holeWinner;
+
+          const holeRow = (
+            <div
+              key={`hole-${h}`}
+              style={gridStyle}
+              className={`${styles.scRow} ${h === currentHole ? styles.scCurrent : ''}`}
+            >
+              <span className={styles.scHole}>{h}</span>
+              {tabIds.map(id => {
+                const s = hd[id];
+                const isCarrier = ybCarrierForTab === id;
+                const holePar = courseHoles[h]?.par;
+                const scoreDiff = (s?.gross && holePar) ? s.gross - holePar : null;
+                const shapeClass = scoreDiff === null ? ''
+                  : scoreDiff <= -2 ? styles.scoreEagle
+                  : scoreDiff === -1 ? styles.scoreBirdie
+                  : scoreDiff === 1 ? styles.scoreBogey
+                  : scoreDiff >= 2 ? styles.scoreDouble
+                  : '';
+                return (
+                  <span key={id} className={styles.scScore}>
+                    <span className={styles.dotSlot} />
+                    <span className={`${styles.scorePill} ${isCarrier ? styles.ybCarrier : ''} ${shapeClass}`}>
+                      {s?.gross ?? '—'}
+                    </span>
+                    <span className={styles.dotSlot} />
+                  </span>
+                );
+              })}
+              <span className={styles.scWinner}>
+                {winner === 'half'
+                  ? <span className={styles.halfMark}>½</span>
+                  : winner ? <TeamLogo teamId={winner} size={18} /> : null}
+              </span>
+            </div>
+          );
+
+          if (!isLastPlayed) return holeRow;
+
+          // Summary row: cumulative YB net + running lead
+          let cumA = 0, cumB = 0;
+          for (let hh = 1; hh <= h; hh++) {
+            const hhd = holeData[hh];
+            if (hhd?.ybNetA != null) cumA += hhd.ybNetA;
+            if (hhd?.ybNetB != null) cumB += hhd.ybNetB;
+          }
+          const diff = cumA - cumB; // negative = A winning
+          const tabCum = activeTab === 'teamA' ? cumA : cumB;
+          const diffStr = diff === 0
+            ? 'Tied'
+            : diff < 0
+              ? `${tournament?.teamA?.name || 'A'} −${Math.abs(diff)}`
+              : `${tournament?.teamB?.name || 'B'} −${Math.abs(diff)}`;
+          const diffColor = diff < 0 ? 'var(--teamA)' : diff > 0 ? 'var(--teamB)' : 'var(--text-muted)';
+
+          return [
+            holeRow,
+            <div key={`yb-sum-${h}`} style={gridStyle} className={`${styles.scRow} ${styles.scTotalRow}`}>
+              <span className={styles.scHole} style={{ fontSize: 10, color: 'var(--yellow)' }}>🟡</span>
+              {tabIds.map((id, idx) => (
+                <span key={id} className={styles.scScore}>
+                  <span className={styles.dotSlot} />
+                  <span className={styles.scorePill} style={{ color: teamColor, fontWeight: 700 }}>
+                    {idx === 0 ? tabCum : ''}
+                  </span>
+                  <span className={styles.dotSlot} />
+                </span>
+              ))}
+              <span style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: diffColor }}>
+                {diffStr}
+              </span>
+            </div>,
+          ];
+        })}
+      </div>
+    );
+  }
 
   return (
     <div className={styles.page}>
@@ -139,11 +309,15 @@ export default function Match({ playerId }) {
       {/* Teams */}
       <div className={styles.teams}>
         <div className={`${styles.teamPill} ${styles.teamA}`}>
-          {match.teamA?.playerIds?.map((id) => players[id]?.name || id).join(' & ')}
+          {isYellowBall
+            ? (tournament?.teamA?.name || 'Team A')
+            : match.teamA?.playerIds?.map((id) => players[id]?.name || id).join(' & ')}
         </div>
         <div className={styles.vsLabel}>vs</div>
         <div className={`${styles.teamPill} ${styles.teamB}`}>
-          {match.teamB?.playerIds?.map((id) => players[id]?.name || id).join(' & ')}
+          {isYellowBall
+            ? (tournament?.teamB?.name || 'Team B')
+            : match.teamB?.playerIds?.map((id) => players[id]?.name || id).join(' & ')}
         </div>
       </div>
 
@@ -168,13 +342,21 @@ export default function Match({ playerId }) {
         <span className={styles.holeLabel}>Hole {currentHole}</span>
         <span className={styles.holePar}>Par {hole.par || '—'}</span>
         <span className={styles.holeSI}>Handicap {hole.strokeIndex || '—'}</span>
-        {receiveStroke && <span className={styles.strokeDot}>+1 stroke</span>}
+        {receiveStroke && !isYellowBall && <span className={styles.strokeDot}>+1 stroke</span>}
       </div>
 
       {/* Score entry */}
       {isMyMatch && !roundComplete && (
         <div className={styles.entryCard}>
           <div className={styles.entryLabel}>Your score — {players[playerId]?.name}</div>
+
+          {isYellowBall && (
+            <div className={myYBCarrier ? styles.ybBannerCarrying : styles.ybBannerWatching}>
+              {myYBCarrier
+                ? '🟡 You have the yellow ball this hole'
+                : `🟡 Yellow ball: ${players[ybCarrierA]?.name?.split(' ')[0] ?? '?'} & ${players[ybCarrierB]?.name?.split(' ')[0] ?? '?'}`}
+            </div>
+          )}
 
           <div className={styles.field}>
             <label>Gross score</label>
@@ -185,7 +367,7 @@ export default function Match({ playerId }) {
             </div>
           </div>
 
-          {net !== null && (
+          {net !== null && !isYellowBall && (
             <div className={styles.netScore}>Net: {net}{receiveStroke ? ' (stroke)' : ''}</div>
           )}
 
@@ -251,110 +433,136 @@ export default function Match({ playerId }) {
       {/* Scorecard */}
       <div className={styles.scorecard}>
         <div className={styles.sectionLabel}>Scorecard</div>
-        <div className={styles.scorecardGrid}>
-          {/* Compact single header row */}
-          <div
-            className={`${styles.scRow} ${styles.scHeader}`}
-            style={{ gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 26px` }}
-          >
-            <span />
-            {allPlayerIds.map((id) => {
-              const isTeamA = match.teamA?.playerIds?.includes(id);
-              return (
-                <span key={id} style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                  <span style={{ color: isTeamA ? 'var(--teamA)' : 'var(--teamB)', fontWeight: 700, fontSize: '13px' }}>
-                    {players[id]?.name?.split(' ')[0] || id}
+
+        {isYellowBall ? (
+          <>
+            {/* Team tabs */}
+            <div className={styles.ybTabs}>
+              {['teamA', 'teamB'].map(team => (
+                <button
+                  key={team}
+                  className={`${styles.ybTabBtn} ${activeTab === team ? styles.ybTabActive : ''}`}
+                  style={activeTab === team ? {
+                    background: team === 'teamA'
+                      ? 'color-mix(in srgb, var(--teamA) 12%, transparent)'
+                      : 'color-mix(in srgb, var(--teamB) 12%, transparent)',
+                    color: team === 'teamA' ? 'var(--teamA)' : 'var(--teamB)',
+                    borderColor: team === 'teamA' ? 'var(--teamA)' : 'var(--teamB)',
+                  } : {}}
+                  onClick={() => setYbTab(team)}
+                >
+                  {team === 'teamA' ? (tournament?.teamA?.name || 'Team A') : (tournament?.teamB?.name || 'Team B')}
+                </button>
+              ))}
+            </div>
+            {renderYBScorecard()}
+          </>
+        ) : (
+          <div className={styles.scorecardGrid}>
+            {/* Compact single header row */}
+            <div
+              className={`${styles.scRow} ${styles.scHeader}`}
+              style={{ gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 26px` }}
+            >
+              <span />
+              {allPlayerIds.map((id) => {
+                const isTeamA = match.teamA?.playerIds?.includes(id);
+                return (
+                  <span key={id} style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                    <span style={{ color: isTeamA ? 'var(--teamA)' : 'var(--teamB)', fontWeight: 700, fontSize: '13px' }}>
+                      {players[id]?.name?.split(' ')[0] || id}
+                    </span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 400 }}>
+                      hcp {players[id]?.handicap ?? '—'}
+                    </span>
                   </span>
-                  <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 400 }}>
-                    hcp {players[id]?.handicap ?? '—'}
+                );
+              })}
+              <span />
+            </div>
+            {Array.from({ length: 18 }, (_, i) => i + 1).map((h) => {
+              const hd = holeData[h] || {};
+              const winner = hd.holeWinner;
+              const holePar = courseHoles[h]?.par;
+
+              const carriers = new Set();
+              ['teamA', 'teamB'].forEach((team) => {
+                const ids = match[team]?.playerIds || [];
+                const nets = ids.map((id) => ({ id, net: hd[id]?.net })).filter((x) => x.net != null);
+                if (!nets.length) return;
+                const best = Math.min(...nets.map((x) => x.net));
+                nets.filter((x) => x.net === best).forEach((x) => carriers.add(x.id));
+              });
+
+              const gridStyle = { gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 26px` };
+              const isLastPlayed = !!hd.holeWinner && !holeData[h + 1]?.holeWinner;
+
+              const holeRow = (
+                <div key={`hole-${h}`} style={gridStyle} className={`${styles.scRow} ${h === currentHole ? styles.scCurrent : ''}`}>
+                  <span className={styles.scHole}>{h}</span>
+                  {allPlayerIds.map((id) => {
+                    const s = hd[id];
+                    const alloc = match.strokeAllocation?.[id]?.holes || [];
+                    const isCarrier = carriers.has(id);
+                    const isTeamA = match.teamA?.playerIds?.includes(id);
+                    const carrierClass = isCarrier ? (isTeamA ? styles.carrierA : styles.carrierB) : '';
+                    const scoreDiff = (s?.gross && holePar) ? s.gross - holePar : null;
+                    const shapeClass = scoreDiff === null ? ''
+                      : scoreDiff <= -2 ? styles.scoreEagle
+                      : scoreDiff === -1 ? styles.scoreBirdie
+                      : scoreDiff === 1 ? styles.scoreBogey
+                      : scoreDiff >= 2 ? styles.scoreDouble
+                      : '';
+                    return (
+                      <span key={id} className={styles.scScore}>
+                        <span className={styles.dotSlot} />
+                        <span className={`${styles.scorePill} ${carrierClass} ${shapeClass}`}>
+                          {s ? s.gross : '—'}
+                        </span>
+                        <span className={styles.dotSlot}>
+                          {alloc.includes(h) && <span className={styles.strokeMark} />}
+                        </span>
+                      </span>
+                    );
+                  })}
+                  <span className={styles.scWinner}>
+                    {winner === 'half' ? <span className={styles.halfMark}>½</span> : winner ? <TeamLogo teamId={winner} size={18} /> : null}
                   </span>
-                </span>
+                </div>
               );
-            })}
-            <span />
-          </div>
-          {Array.from({ length: 18 }, (_, i) => i + 1).map((h) => {
-            const hd = holeData[h] || {};
-            const winner = hd.holeWinner;
-            const holePar = courseHoles[h]?.par;
 
-            const carriers = new Set();
-            ['teamA', 'teamB'].forEach((team) => {
-              const ids = match[team]?.playerIds || [];
-              const nets = ids.map((id) => ({ id, net: hd[id]?.net })).filter((x) => x.net != null);
-              if (!nets.length) return;
-              const best = Math.min(...nets.map((x) => x.net));
-              nets.filter((x) => x.net === best).forEach((x) => carriers.add(x.id));
-            });
+              if (!isLastPlayed) return holeRow;
 
-            const gridStyle = { gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 26px` };
-            const isLastPlayed = !!hd.holeWinner && !holeData[h + 1]?.holeWinner;
+              // To-par summary row pinned after last completed hole
+              const toParCells = allPlayerIds.map(id => {
+                let sum = 0, played = 0;
+                for (let hh = 1; hh <= 18; hh++) {
+                  const s = holeData[hh]?.[id];
+                  const par = courseHoles[hh]?.par;
+                  if (s?.gross && par) { sum += s.gross - par; played++; }
+                }
+                const str = played === 0 ? '—' : sum === 0 ? 'E' : sum > 0 ? `+${sum}` : `${sum}`;
+                const color = sum < 0 ? 'var(--green)' : sum > 0 ? '#c0392b' : 'var(--text-muted)';
+                return { id, str, color };
+              });
 
-            const holeRow = (
-              <div key={`hole-${h}`} style={gridStyle} className={`${styles.scRow} ${h === currentHole ? styles.scCurrent : ''}`}>
-                <span className={styles.scHole}>{h}</span>
-                {allPlayerIds.map((id) => {
-                  const s = hd[id];
-                  const alloc = match.strokeAllocation?.[id]?.holes || [];
-                  const isCarrier = carriers.has(id);
-                  const isTeamA = match.teamA?.playerIds?.includes(id);
-                  const carrierClass = isCarrier ? (isTeamA ? styles.carrierA : styles.carrierB) : '';
-                  const scoreDiff = (s?.gross && holePar) ? s.gross - holePar : null;
-                  const shapeClass = scoreDiff === null ? ''
-                    : scoreDiff <= -2 ? styles.scoreEagle
-                    : scoreDiff === -1 ? styles.scoreBirdie
-                    : scoreDiff === 1 ? styles.scoreBogey
-                    : scoreDiff >= 2 ? styles.scoreDouble
-                    : '';
-                  return (
+              return [
+                holeRow,
+                <div key={`topar-${h}`} style={gridStyle} className={`${styles.scRow} ${styles.scTotalRow}`}>
+                  <span className={styles.scHole} style={{ fontSize: 9, color: 'var(--text-muted)' }}>vs par</span>
+                  {toParCells.map(({ id, str, color }) => (
                     <span key={id} className={styles.scScore}>
                       <span className={styles.dotSlot} />
-                      <span className={`${styles.scorePill} ${carrierClass} ${shapeClass}`}>
-                        {s ? s.gross : '—'}
-                      </span>
-                      <span className={styles.dotSlot}>
-                        {alloc.includes(h) && <span className={styles.strokeMark} />}
-                      </span>
+                      <span className={`${styles.scorePill}`} style={{ color, fontWeight: 700 }}>{str}</span>
+                      <span className={styles.dotSlot} />
                     </span>
-                  );
-                })}
-                <span className={styles.scWinner}>
-                  {winner === 'half' ? <span className={styles.halfMark}>½</span> : winner ? <TeamLogo teamId={winner} size={18} /> : null}
-                </span>
-              </div>
-            );
-
-            if (!isLastPlayed) return holeRow;
-
-            // To-par summary row — pinned right after the last completed hole
-            const toParCells = allPlayerIds.map(id => {
-              let sum = 0, played = 0;
-              for (let hh = 1; hh <= 18; hh++) {
-                const s = holeData[hh]?.[id];
-                const par = courseHoles[hh]?.par;
-                if (s?.gross && par) { sum += s.gross - par; played++; }
-              }
-              const str = played === 0 ? '—' : sum === 0 ? 'E' : sum > 0 ? `+${sum}` : `${sum}`;
-              const color = sum < 0 ? 'var(--green)' : sum > 0 ? '#c0392b' : 'var(--text-muted)';
-              return { id, str, color };
-            });
-
-            return [
-              holeRow,
-              <div key={`topar-${h}`} style={gridStyle} className={`${styles.scRow} ${styles.scTotalRow}`}>
-                <span className={styles.scHole} style={{ fontSize: 9, color: 'var(--text-muted)' }}>vs par</span>
-                {toParCells.map(({ id, str, color }) => (
-                  <span key={id} className={styles.scScore}>
-                    <span className={styles.dotSlot} />
-                    <span className={`${styles.scorePill}`} style={{ color, fontWeight: 700 }}>{str}</span>
-                    <span className={styles.dotSlot} />
-                  </span>
-                ))}
-                <span />
-              </div>,
-            ];
-          })}
-        </div>
+                  ))}
+                  <span />
+                </div>,
+              ];
+            })}
+          </div>
+        )}
       </div>
 
       <div className={styles.bottomPad} />
