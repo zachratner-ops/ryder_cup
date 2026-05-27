@@ -1,13 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ref, onValue, set, update } from 'firebase/database';
 import { db } from '../firebase';
 import TeamLogo from '../components/TeamLogo';
 import styles from './Match.module.css';
 
-// Compute match status string from hole results for four-ball / singles
 function computeMatchStatus(holeResults, teamAIds, teamBIds) {
-  let diff = 0; // positive = teamA up
+  let diff = 0;
   let holesPlayed = 0;
   for (let h = 1; h <= 18; h++) {
     const hole = holeResults?.[h];
@@ -19,7 +18,6 @@ function computeMatchStatus(holeResults, teamAIds, teamBIds) {
   if (holesPlayed === 0) return 'All Square';
   const remaining = 18 - holesPlayed;
   if (diff === 0) return `All Square thru ${holesPlayed}`;
-  const leader = diff > 0 ? 'A' : 'B';
   const margin = Math.abs(diff);
   if (margin > remaining) return `${margin}UP (closed)`;
   return `${margin}UP thru ${holesPlayed}`;
@@ -34,6 +32,8 @@ export default function Match({ playerId }) {
   const [courseHoles, setCourseHoles] = useState({});
   const [currentHole, setCurrentHole] = useState(1);
   const [entry, setEntry] = useState({ gross: '', fairwayHit: null, gir: false, putts: '' });
+  const [justSaved, setJustSaved] = useState(false);
+  const initialJumped = useRef(false);
 
   useEffect(() => {
     const u1 = onValue(ref(db, `matches/${matchId}`), (s) => setMatch(s.val()));
@@ -42,6 +42,22 @@ export default function Match({ playerId }) {
     const u4 = onValue(ref(db, 'course/holes'), (s) => setCourseHoles(s.val() || {}));
     return () => { u1(); u2(); u3(); u4(); };
   }, [matchId]);
+
+  // Auto-advance to first unplayed hole on initial load
+  useEffect(() => {
+    if (initialJumped.current || Object.keys(holeData).length === 0) return;
+    const firstUnplayed = Array.from({ length: 18 }, (_, i) => i + 1)
+      .find(h => !holeData[h]?.holeWinner);
+    if (firstUnplayed) setCurrentHole(firstUnplayed);
+    initialJumped.current = true;
+  }, [holeData]);
+
+  // Default gross to par when hole changes
+  useEffect(() => {
+    const par = courseHoles[currentHole]?.par;
+    if (!par) return;
+    setEntry({ gross: par, fairwayHit: null, gir: false, putts: '' });
+  }, [currentHole, courseHoles]);
 
   if (!match) return <div className={styles.loading}>Loading match…</div>;
 
@@ -56,8 +72,15 @@ export default function Match({ playerId }) {
   const isMyMatch = allPlayerIds.includes(playerId);
   const roundComplete = match.status === 'complete';
 
+  const myHoleScore = holeData[currentHole]?.[playerId];
+  const iSubmitted = !!myHoleScore?.gross;
+  const holeComplete = !!holeData[currentHole]?.holeWinner;
+  const waitingOn = iSubmitted && !holeComplete
+    ? allPlayerIds.filter(id => id !== playerId && !holeData[currentHole]?.[id]?.gross)
+    : [];
+
   async function submitHole() {
-    if (!gross || !entry.putts) return;
+    if (!gross || entry.putts === '') return;
     const holeRef = ref(db, `holes/${matchId}/${currentHole}/${playerId}`);
     await set(holeRef, {
       gross,
@@ -67,11 +90,13 @@ export default function Match({ playerId }) {
       putts: parseInt(entry.putts),
     });
 
-    // Compute hole winner from all players' net scores
     await computeAndWriteHoleWinner(currentHole);
 
-    setEntry({ gross: '', fairwayHit: null, gir: false, putts: '' });
-    if (currentHole < 18) setCurrentHole((h) => h + 1);
+    setJustSaved(true);
+    setTimeout(() => {
+      setJustSaved(false);
+      if (currentHole < 18) setCurrentHole(h => h + 1);
+    }, 900);
   }
 
   async function computeAndWriteHoleWinner(holeNum) {
@@ -80,14 +105,12 @@ export default function Match({ playerId }) {
     );
     const scores = snap.val() || {};
 
-    // For four-ball: best net from each team pairing
     const teamAIds = match.teamA?.playerIds || [];
     const teamBIds = match.teamB?.playerIds || [];
 
     const teamANets = teamAIds.map((id) => scores[id]?.net).filter((n) => n != null);
     const teamBNets = teamBIds.map((id) => scores[id]?.net).filter((n) => n != null);
 
-    // Only compute when all players have submitted
     if (teamANets.length < teamAIds.length || teamBNets.length < teamBIds.length) return;
 
     const bestA = Math.min(...teamANets);
@@ -144,11 +167,11 @@ export default function Match({ playerId }) {
       <div className={styles.holeInfo}>
         <span className={styles.holeLabel}>Hole {currentHole}</span>
         <span className={styles.holePar}>Par {hole.par || '—'}</span>
-        <span className={styles.holeSI}>SI {hole.strokeIndex || '—'}</span>
+        <span className={styles.holeSI}>Handicap {hole.strokeIndex || '—'}</span>
         {receiveStroke && <span className={styles.strokeDot}>+1 stroke</span>}
       </div>
 
-      {/* Score entry — only for match participants */}
+      {/* Score entry */}
       {isMyMatch && !roundComplete && (
         <div className={styles.entryCard}>
           <div className={styles.entryLabel}>Your score — {players[playerId]?.name}</div>
@@ -205,13 +228,23 @@ export default function Match({ playerId }) {
             </div>
           </div>
 
-          <button
-            className={styles.submitBtn}
-            onClick={submitHole}
-            disabled={!gross || entry.putts === ''}
-          >
-            Save Hole {currentHole}
-          </button>
+          {justSaved ? (
+            <div className={styles.savedBanner}>✓ Saved!</div>
+          ) : (
+            <button
+              className={styles.submitBtn}
+              onClick={submitHole}
+              disabled={!gross || entry.putts === ''}
+            >
+              Save Hole {currentHole}
+            </button>
+          )}
+
+          {waitingOn.length > 0 && (
+            <div className={styles.waitingMsg}>
+              Waiting on {waitingOn.map(id => players[id]?.name?.split(' ')[0]).join(', ')}…
+            </div>
+          )}
         </div>
       )}
 
@@ -221,17 +254,21 @@ export default function Match({ playerId }) {
         <div className={styles.scorecardGrid}>
           <div
             className={styles.scRow + ' ' + styles.scHeader}
-            style={{ gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 32px` }}
+            style={{ gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 26px` }}
           >
             <span style={{ textAlign: 'center' }}>Hole</span>
-            {allPlayerIds.map((id) => <span key={id} style={{ textAlign: 'center' }}>{players[id]?.name?.split(' ')[0] || id}</span>)}
+            {allPlayerIds.map((id) => (
+              <span key={id} style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
+                <span>{players[id]?.name?.split(' ')[0] || id}</span>
+                <span style={{ fontSize: '10px', fontWeight: 400, opacity: 0.7, textTransform: 'none', letterSpacing: 0 }}>hcp {players[id]?.handicap ?? '—'}</span>
+              </span>
+            ))}
             <span style={{ textAlign: 'center' }}>Win</span>
           </div>
           {Array.from({ length: 18 }, (_, i) => i + 1).map((h) => {
             const hd = holeData[h] || {};
             const winner = hd.holeWinner;
 
-            // Find which player(s) carried the hole (best net on their team)
             const carriers = new Set();
             ['teamA', 'teamB'].forEach((team) => {
               const ids = match[team]?.playerIds || [];
@@ -241,7 +278,7 @@ export default function Match({ playerId }) {
               nets.filter((x) => x.net === best).forEach((x) => carriers.add(x.id));
             });
 
-            const gridStyle = { gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 32px` };
+            const gridStyle = { gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 26px` };
             return (
               <div key={h} style={gridStyle} className={`${styles.scRow} ${h === currentHole ? styles.scCurrent : ''}`}>
                 <span className={styles.scHole}>{h}</span>
@@ -250,13 +287,16 @@ export default function Match({ playerId }) {
                   const alloc = match.strokeAllocation?.[id]?.holes || [];
                   const isCarrier = carriers.has(id);
                   const isTeamA = match.teamA?.playerIds?.includes(id);
+                  const carrierClass = isCarrier ? (isTeamA ? styles.carrierA : styles.carrierB) : '';
                   return (
-                    <span
-                      key={id}
-                      className={`${styles.scScore} ${isCarrier ? (isTeamA ? styles.carrierA : styles.carrierB) : ''}`}
-                    >
-                      {s ? s.gross : '—'}
-                      {alloc.includes(h) && <span className={styles.strokeMark} />}
+                    <span key={id} className={styles.scScore}>
+                      <span className={styles.dotSlot} />
+                      <span className={`${styles.scorePill} ${carrierClass}`}>
+                        {s ? s.gross : '—'}
+                      </span>
+                      <span className={styles.dotSlot}>
+                        {alloc.includes(h) && <span className={styles.strokeMark} />}
+                      </span>
                     </span>
                   );
                 })}

@@ -164,45 +164,128 @@
 
 .matchCard {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 10px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 14px;
+  border-radius: var(--radius);
+  padding: 14px 14px 12px;
   width: 100%;
   text-align: left;
-  margin-bottom: 6px;
-  gap: 8px;
+  margin-bottom: 8px;
 }
 
-.matchTeams {
+/* 3-column info row */
+.mcInfoRow {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.mcSide {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mcSideRight {
+  align-items: flex-end;
+}
+
+.mcTeamRow {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 500;
-  flex: 1;
+  gap: 6px;
 }
 
-.matchVs {
-  color: var(--text-muted);
-  font-size: 13px;
+.mcTeamRowRight {
+  flex-direction: row-reverse;
 }
 
-.matchStatus {
+.mcNameA {
   font-size: 13px;
   font-weight: 700;
   color: var(--teamA);
-  background: rgba(78,42,132,0.08);
-  padding: 3px 10px;
-  border-radius: 20px;
 }
 
-.matchArrow {
-  font-size: 20px;
-  color: var(--text-muted);
+.mcNameB {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--teamB);
 }
+
+.mcUp {
+  font-size: 16px;
+  font-weight: 800;
+  display: block;
+}
+
+.mcCenter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding-top: 2px;
+}
+
+.mcAllSquare {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.mcThruText {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Full-width hole strip */
+.mcHoleStrip {
+  display: grid;
+  grid-template-columns: repeat(18, 1fr);
+  gap: 2px;
+}
+
+.mcHoleDot {
+  height: 22px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mcDotNum {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.mcDotEmpty {
+  background: var(--surface2);
+}
+.mcDotEmpty .mcDotNum { color: var(--text-muted); }
+
+.mcDotA {
+  background: var(--teamA);
+}
+.mcDotA .mcDotNum { color: white; }
+
+.mcDotB {
+  background: var(--teamB);
+}
+.mcDotB .mcDotNum { color: white; }
+
+.mcDotHalf {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+}
+.mcDotHalf .mcDotNum { color: var(--text-muted); }
 
 .joinBtn {
   background: var(--teamA);

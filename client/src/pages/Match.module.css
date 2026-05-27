@@ -219,6 +219,23 @@
   opacity: 0.4;
 }
 
+.savedBanner {
+  background: var(--green);
+  color: white;
+  border-radius: var(--radius);
+  padding: 16px;
+  font-size: 17px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.waitingMsg {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: -4px;
+}
+
 /* Scorecard */
 .scorecard {
   padding: 0 16px;
@@ -242,12 +259,11 @@
 
 .scRow {
   display: grid;
-  grid-template-columns: 32px repeat(auto-fill, minmax(48px, 1fr)) 40px;
   border-bottom: 1px solid var(--border);
-  padding: 8px 12px;
+  padding: 6px 10px;
   font-size: 13px;
   align-items: center;
-  gap: 4px;
+  column-gap: 3px;
 }
 
 .scRow:last-child { border-bottom: none; }
@@ -270,14 +286,25 @@
 }
 
 .scScore {
-  text-align: center;
   font-size: 13px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  border-radius: 5px;
-  padding: 3px 2px;
+}
+
+.dotSlot {
+  width: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.scorePill {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .strokeMark {
