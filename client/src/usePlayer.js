@@ -1,26 +1,38 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { db } from './firebase';
-import { ref, set, serverTimestamp } from 'firebase/database';
+import { ref, set } from 'firebase/database';
 
-const STORAGE_KEY = 'ryder_playerId';
+const PLAYER_KEY = 'ryder_playerId';
+const ADMIN_KEY  = 'ryder_isAdmin';
 
 export function usePlayer() {
-  const [playerId, setPlayerIdState] = useState(() => localStorage.getItem(STORAGE_KEY));
+  const [playerId, setPlayerIdState] = useState(() => localStorage.getItem(PLAYER_KEY));
+  const [isAdmin, setIsAdminState]   = useState(() => localStorage.getItem(ADMIN_KEY) === 'true');
 
   function selectPlayer(id) {
-    localStorage.setItem(STORAGE_KEY, id);
+    localStorage.setItem(PLAYER_KEY, id);
+    localStorage.removeItem(ADMIN_KEY);
     setPlayerIdState(id);
-    // Mark session active
+    setIsAdminState(false);
     set(ref(db, `activeSessions/${id}`), {
       lastSeen: Date.now(),
       deviceId: crypto.randomUUID(),
     });
   }
 
-  function clearPlayer() {
-    localStorage.removeItem(STORAGE_KEY);
+  function activateAdmin() {
+    localStorage.removeItem(PLAYER_KEY);
+    localStorage.setItem(ADMIN_KEY, 'true');
     setPlayerIdState(null);
+    setIsAdminState(true);
   }
 
-  return { playerId, selectPlayer, clearPlayer };
+  function clearPlayer() {
+    localStorage.removeItem(PLAYER_KEY);
+    localStorage.removeItem(ADMIN_KEY);
+    setPlayerIdState(null);
+    setIsAdminState(false);
+  }
+
+  return { playerId, isAdmin, selectPlayer, activateAdmin, clearPlayer };
 }

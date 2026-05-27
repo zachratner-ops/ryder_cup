@@ -12,7 +12,7 @@ import Profile from './pages/Profile';
 import Nav from './components/Nav';
 
 export default function App() {
-  const { playerId, selectPlayer, clearPlayer } = usePlayer();
+  const { playerId, isAdmin, selectPlayer, activateAdmin, clearPlayer } = usePlayer();
   const [players, setPlayers] = useState({});
 
   useEffect(() => {
@@ -32,8 +32,8 @@ export default function App() {
         <Route
           path="/match/:matchId"
           element={
-            playerId ? (
-              <><Match playerId={playerId} />{nav}</>
+            (playerId || isAdmin) ? (
+              <><Match playerId={playerId} isAdmin={isAdmin} />{nav}</>
             ) : (
               <Navigate to="/select" replace />
             )
@@ -45,7 +45,13 @@ export default function App() {
         <Route
           path="/profile"
           element={
-            <><Profile playerId={playerId} onSelect={selectPlayer} onClear={clearPlayer} />{nav}</>
+            <><Profile
+              playerId={playerId}
+              isAdmin={isAdmin}
+              onSelect={selectPlayer}
+              onClear={clearPlayer}
+              onActivateAdmin={activateAdmin}
+            />{nav}</>
           }
         />
 
