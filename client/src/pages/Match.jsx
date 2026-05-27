@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ref, onValue, set, update } from 'firebase/database';
 import { db } from '../firebase';
+import TeamLogo from '../components/TeamLogo';
 import styles from './Match.module.css';
 
 // Compute match status string from hole results for four-ball / singles
@@ -221,25 +222,42 @@ export default function Match({ playerId }) {
           <div className={styles.scRow + ' ' + styles.scHeader}>
             <span>Hole</span>
             {allPlayerIds.map((id) => <span key={id}>{players[id]?.name?.split(' ')[0] || id}</span>)}
-            <span>Winner</span>
+            <span>Win</span>
           </div>
           {Array.from({ length: 18 }, (_, i) => i + 1).map((h) => {
             const hd = holeData[h] || {};
             const winner = hd.holeWinner;
+
+            // Find which player(s) carried the hole (best net on their team)
+            const carriers = new Set();
+            ['teamA', 'teamB'].forEach((team) => {
+              const ids = match[team]?.playerIds || [];
+              const nets = ids.map((id) => ({ id, net: hd[id]?.net })).filter((x) => x.net != null);
+              if (!nets.length) return;
+              const best = Math.min(...nets.map((x) => x.net));
+              nets.filter((x) => x.net === best).forEach((x) => carriers.add(x.id));
+            });
+
             return (
               <div key={h} className={`${styles.scRow} ${h === currentHole ? styles.scCurrent : ''}`}>
                 <span className={styles.scHole}>{h}</span>
                 {allPlayerIds.map((id) => {
                   const s = hd[id];
                   const alloc = match.strokeAllocation?.[id]?.holes || [];
+                  const isCarrier = carriers.has(id);
+                  const isTeamA = match.teamA?.playerIds?.includes(id);
                   return (
-                    <span key={id} className={styles.scScore}>
-                      {s ? `${s.gross}${alloc.includes(h) ? '•' : ''}` : '—'}
+                    <span
+                      key={id}
+                      className={`${styles.scScore} ${isCarrier ? (isTeamA ? styles.carrierA : styles.carrierB) : ''}`}
+                    >
+                      <span>{s ? s.gross : '—'}</span>
+                      {alloc.includes(h) && <span className={styles.strokeMark}>●</span>}
                     </span>
                   );
                 })}
-                <span className={`${styles.scWinner} ${winner ? styles[winner] : ''}`}>
-                  {winner === 'teamA' ? 'A' : winner === 'teamB' ? 'B' : winner === 'half' ? '½' : ''}
+                <span className={styles.scWinner}>
+                  {winner === 'half' ? <span className={styles.halfMark}>½</span> : winner ? <TeamLogo teamId={winner} size={18} /> : null}
                 </span>
               </div>
             );

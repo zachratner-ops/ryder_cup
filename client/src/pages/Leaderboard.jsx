@@ -10,6 +10,7 @@ export default function Leaderboard({ playerId }) {
   const [tournament, setTournament] = useState(null);
   const [matches, setMatches] = useState({});
   const [rounds, setRounds] = useState({});
+  const [players, setPlayers] = useState({});
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -17,7 +18,8 @@ export default function Leaderboard({ playerId }) {
     const u2 = onValue(ref(db, 'tournament'), (s) => setTournament(s.val()));
     const u3 = onValue(ref(db, 'matches'), (s) => setMatches(s.val() || {}));
     const u4 = onValue(ref(db, 'rounds'), (s) => setRounds(s.val() || {}));
-    return () => { u1(); u2(); u3(); u4(); };
+    const u5 = onValue(ref(db, 'players'), (s) => setPlayers(s.val() || {}));
+    return () => { u1(); u2(); u3(); u4(); u5(); };
   }, []);
 
   if (!tournament) {
@@ -95,9 +97,9 @@ export default function Leaderboard({ playerId }) {
               onClick={() => navigate(`/match/${matchId}`)}
             >
               <div className={styles.matchTeams}>
-                <span>{match.teamA?.playerIds?.join(' / ') || '—'}</span>
+                <span>{match.teamA?.playerIds?.map(id => players[id]?.name?.split(' ')[0] || id).join(' / ') || '—'}</span>
                 <span className={styles.matchVs}>vs</span>
-                <span>{match.teamB?.playerIds?.join(' / ') || '—'}</span>
+                <span>{match.teamB?.playerIds?.map(id => players[id]?.name?.split(' ')[0] || id).join(' / ') || '—'}</span>
               </div>
               {match.currentStatus && (
                 <div className={styles.matchStatus}>{match.currentStatus}</div>

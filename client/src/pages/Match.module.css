@@ -264,10 +264,42 @@
 }
 
 .scHole { font-weight: 700; }
-.scScore { text-align: center; }
-.scWinner { text-align: center; font-weight: 700; }
 
-.scRow .teamA { color: var(--teamA); }
-.scRow .teamB { color: var(--teamB); }
+.scScore {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.strokeMark {
+  color: var(--yellow);
+  font-size: 6px;
+  line-height: 1;
+}
+
+.carrierA {
+  color: var(--teamA);
+  font-weight: 800;
+}
+
+.carrierB {
+  color: var(--teamB);
+  font-weight: 800;
+}
+
+.scWinner {
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.halfMark {
+  font-weight: 700;
+  color: var(--text-muted);
+  font-size: 14px;
+}
 
 .bottomPad { height: 20px; }
