@@ -242,7 +242,7 @@ export default function Leaderboard({ playerId }) {
 
                   // Lead text: "Leads by N stroke(s)" for YB; "NUP" / "N&R" for match play
                   const leadText = isYB
-                    ? `Leads by ${margin} stroke${margin !== 1 ? 's' : ''}`
+                    ? `Up by ${margin} stroke${margin !== 1 ? 's' : ''}`
                     : margin > remaining ? `${margin}&${remaining}` : `${margin}UP`;
 
                   return (
@@ -258,7 +258,7 @@ export default function Leaderboard({ playerId }) {
                             <span className={styles.mcNameA}>{displayA}</span>
                           </div>
                           {leader === 'teamA' && (
-                            <span className={styles.mcUp} style={{ color: 'var(--teamA)', paddingLeft: 24 }}>
+                            <span className={isYB ? styles.mcUpSm : styles.mcUp} style={{ color: 'var(--teamA)', paddingLeft: 24 }}>
                               {leadText}
                             </span>
                           )}
@@ -279,7 +279,7 @@ export default function Leaderboard({ playerId }) {
                             <TeamLogo teamId="teamB" size={18} />
                           </div>
                           {leader === 'teamB' && (
-                            <span className={styles.mcUp} style={{ color: 'var(--teamB)', paddingRight: 24 }}>
+                            <span className={isYB ? styles.mcUpSm : styles.mcUp} style={{ color: 'var(--teamB)', paddingRight: 24 }}>
                               {leadText}
                             </span>
                           )}

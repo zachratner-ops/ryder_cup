@@ -225,7 +225,7 @@
 }
 
 .mcTeamRowRight {
-  flex-direction: row-reverse;
+  /* no row-reverse: HTML order is [name][logo] so logo sits on the right naturally */
 }
 
 .mcNameA {
@@ -243,6 +243,13 @@
 .mcUp {
   font-size: 16px;
   font-weight: 800;
+  display: block;
+}
+
+/* Smaller lead text for stroke-play formats (yellow ball) */
+.mcUpSm {
+  font-size: 12px;
+  font-weight: 700;
   display: block;
 }
 
