@@ -67,7 +67,6 @@ export default function Leaderboard({ playerId }) {
         <div className={`${styles.teamScore} ${styles.teamA}`}>
           <div className={styles.teamLogoRow}>
             <TeamLogo teamId="teamA" size={40} />
-            <div className={styles.teamName}>{teamAName}</div>
           </div>
           <div className={styles.pts}>{leaderboard?.teamA_pts ?? 0}</div>
         </div>
@@ -78,7 +77,6 @@ export default function Leaderboard({ playerId }) {
         <div className={`${styles.teamScore} ${styles.teamB}`}>
           <div className={styles.teamLogoRow}>
             <TeamLogo teamId="teamB" size={40} />
-            <div className={styles.teamName}>{teamBName}</div>
           </div>
           <div className={styles.pts}>{leaderboard?.teamB_pts ?? 0}</div>
         </div>
