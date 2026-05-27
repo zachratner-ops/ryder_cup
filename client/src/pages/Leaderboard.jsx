@@ -167,7 +167,7 @@ export default function Leaderboard({ playerId }) {
             const expanded = isRoundExpanded(roundId);
 
             return (
-              <div key={roundId} className={styles.roundBlock}>
+              <div key={roundId} className={`${styles.roundBlock} ${round.status === 'active' ? styles.roundBlockActive : ''}`}>
                 {/* Round header row */}
                 <button
                   className={`${styles.roundRow} ${round.status === 'active' ? styles.roundRowActive : round.status === 'complete' ? styles.roundRowComplete : ''}`}
