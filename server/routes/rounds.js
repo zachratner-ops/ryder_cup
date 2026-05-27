@@ -124,4 +124,105 @@ router.post('/:roundId/close', async (req, res) => {
   }
 });
 
+// Helper: recalculate ptsAvailable from all rounds minus already-awarded points
+async function recalcPtsAvailable(extraRounds = {}) {
+  const [roundsSnap, lbSnap] = await Promise.all([
+    db.ref('rounds').once('value'),
+    db.ref('leaderboard').once('value'),
+  ]);
+  const rounds = { ...roundsSnap.val(), ...extraRounds };
+  const lb = lbSnap.val() || {};
+  const totalRoundPts = Object.values(rounds)
+    .filter((r) => r !== null)
+    .reduce((sum, r) => sum + (parseFloat(r.pointsValue) || 0), 0);
+  const awarded = (lb.teamA_pts || 0) + (lb.teamB_pts || 0);
+  return Math.max(0, totalRoundPts - awarded);
+}
+
+// POST /api/rounds/add
+// Body: { adminPin, format, pointsValue }
+router.post('/add', async (req, res) => {
+  try {
+    const { adminPin, format, pointsValue } = req.body;
+    const tournSnap = await db.ref('tournament').once('value');
+    if (tournSnap.val().adminPin !== adminPin) return res.status(403).json({ error: 'Bad PIN' });
+
+    const roundsSnap = await db.ref('rounds').once('value');
+    const rounds = roundsSnap.val() || {};
+    const maxOrder = Object.values(rounds).reduce((max, r) => Math.max(max, r.order || 0), 0);
+    const newOrder = maxOrder + 1;
+    const newRoundId = `round${newOrder}_${Date.now()}`;
+    const pts = parseFloat(pointsValue) || 1;
+
+    const newRound = { format: format || 'fourball', pointsValue: pts, order: newOrder, status: 'setup' };
+    const updates = {};
+    updates[`rounds/${newRoundId}`] = newRound;
+    updates['leaderboard/ptsAvailable'] = await recalcPtsAvailable({ [newRoundId]: newRound });
+
+    await db.ref().update(updates);
+    res.json({ ok: true, roundId: newRoundId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/rounds/:roundId/update
+// Body: { adminPin, format, pointsValue }
+router.post('/:roundId/update', async (req, res) => {
+  try {
+    const { roundId } = req.params;
+    const { adminPin, format, pointsValue } = req.body;
+
+    const tournSnap = await db.ref('tournament').once('value');
+    if (tournSnap.val().adminPin !== adminPin) return res.status(403).json({ error: 'Bad PIN' });
+
+    const roundSnap = await db.ref(`rounds/${roundId}`).once('value');
+    const round = roundSnap.val();
+    if (!round) return res.status(404).json({ error: 'Round not found' });
+    if (round.status !== 'setup') return res.status(400).json({ error: 'Can only edit rounds in setup status' });
+
+    const pts = parseFloat(pointsValue) || 1;
+    const updatedRound = { ...round, format, pointsValue: pts };
+    const updates = {};
+    updates[`rounds/${roundId}/format`] = format;
+    updates[`rounds/${roundId}/pointsValue`] = pts;
+    updates['leaderboard/ptsAvailable'] = await recalcPtsAvailable({ [roundId]: updatedRound });
+
+    await db.ref().update(updates);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/rounds/:roundId/delete
+// Body: { adminPin }
+router.post('/:roundId/delete', async (req, res) => {
+  try {
+    const { roundId } = req.params;
+    const { adminPin } = req.body;
+
+    const tournSnap = await db.ref('tournament').once('value');
+    if (tournSnap.val().adminPin !== adminPin) return res.status(403).json({ error: 'Bad PIN' });
+
+    const roundSnap = await db.ref(`rounds/${roundId}`).once('value');
+    const round = roundSnap.val();
+    if (!round) return res.status(404).json({ error: 'Round not found' });
+    if (round.status !== 'setup') return res.status(400).json({ error: 'Can only delete rounds in setup status' });
+
+    const updates = {};
+    updates[`rounds/${roundId}`] = null;
+    // Pass null to exclude this round from recalc
+    updates['leaderboard/ptsAvailable'] = await recalcPtsAvailable({ [roundId]: null });
+
+    await db.ref().update(updates);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

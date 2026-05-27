@@ -99,7 +99,7 @@ export default function Admin() {
       {!tournament?.name ? (
         <TournamentSetup />
       ) : (
-        <RoundManager tournament={tournament} />
+        <RoundManager tournament={tournament} adminPin={pin} />
       )}
 
       <button className={styles.resetBtn} onClick={handleReset}>
