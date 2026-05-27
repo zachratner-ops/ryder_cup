@@ -18,6 +18,11 @@ function computeMatchInfo(matchHoles) {
   return { diff, holesPlayed };
 }
 
+const formatLabel = (f) => {
+  const labels = { fourball: 'Four-ball', foursomes: 'Foursomes', singles: 'Singles', yellowball: 'Yellow Ball' };
+  return labels[f] || f;
+};
+
 export default function Leaderboard({ playerId }) {
   const [leaderboard, setLeaderboard] = useState(null);
   const [tournament, setTournament] = useState(null);
@@ -25,6 +30,7 @@ export default function Leaderboard({ playerId }) {
   const [rounds, setRounds] = useState({});
   const [players, setPlayers] = useState({});
   const [allHoles, setAllHoles] = useState({});
+  const [expandedRounds, setExpandedRounds] = useState({});
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -45,16 +51,80 @@ export default function Leaderboard({ playerId }) {
     );
   }
 
-  const activeMatches = Object.entries(matches).filter(([, m]) => m.status === 'active');
+  const ptsA = leaderboard?.teamA_pts ?? 0;
+  const ptsB = leaderboard?.teamB_pts ?? 0;
+  const ptsAvail = leaderboard?.ptsAvailable ?? 0;
+  const totalPts = ptsA + ptsB + ptsAvail;
+  // Each slot = 1 point, split into 2 half-sub-segments for half-point resolution
+  const numSlots = Math.max(Math.ceil(totalPts), 4);
+
+  // Live projected points from active matches
+  let liveAPoints = 0;
+  let liveBPoints = 0;
+  Object.entries(matches).forEach(([matchId, match]) => {
+    if (match.status !== 'active') return;
+    const { diff } = computeMatchInfo(allHoles[matchId] || {});
+    const pts = rounds[match.roundId]?.pointsValue || 1;
+    if (diff > 0) liveAPoints += pts;
+    else if (diff < 0) liveBPoints += pts;
+  });
+
+  // Boundaries: A fills from left, B fills from right, live fills adjacent gaps
+  const aTerrEnd = Math.ceil(ptsA);
+  const bTerrStart = numSlots - Math.ceil(ptsB);
+  const liveAEnd = aTerrEnd + Math.ceil(liveAPoints);
+  const liveBStart = bTerrStart - Math.ceil(liveBPoints);
+
+  function getSlotState(i) {
+    // A finalized (whole points)
+    if (i < Math.floor(ptsA)) return 'A';
+    // A half-point
+    if (i === Math.floor(ptsA) && (ptsA % 1) >= 0.5) return 'A-half';
+    // B finalized (whole points, from right)
+    const fromRight = numSlots - 1 - i;
+    if (fromRight < Math.floor(ptsB)) return 'B';
+    // B half-point
+    if (fromRight === Math.floor(ptsB) && (ptsB % 1) >= 0.5) return 'B-half';
+    // Live A projection (fills after A's territory)
+    if (i >= aTerrEnd && i < liveAEnd) return 'liveA';
+    // Live B projection (fills before B's territory)
+    if (i >= liveBStart && i < bTerrStart) return 'liveB';
+    return 'empty';
+  }
+
+  function getSubSegs(state) {
+    switch (state) {
+      case 'A':      return [styles.segA, styles.segA];
+      case 'A-half': return [styles.segA, styles.segEmpty];
+      case 'B':      return [styles.segB, styles.segB];
+      case 'B-half': return [styles.segEmpty, styles.segB];
+      case 'liveA':  return [styles.segLiveA, styles.segLiveA];
+      case 'liveB':  return [styles.segLiveB, styles.segLiveB];
+      default:       return [styles.segEmpty, styles.segEmpty];
+    }
+  }
+
   const roundList = Object.entries(rounds).sort(([, a], [, b]) => a.order - b.order);
 
-    const teamAName = tournament.teamA?.name || 'Northwestern';
-  const teamBName = tournament.teamB?.name || 'Nebraska';
+  // Group matches by roundId
+  const matchesByRound = {};
+  Object.entries(matches).forEach(([matchId, match]) => {
+    const rid = match.roundId;
+    if (!matchesByRound[rid]) matchesByRound[rid] = [];
+    matchesByRound[rid].push([matchId, match]);
+  });
 
-  const formatLabel = (f) => {
-    const labels = { fourball: 'Four-ball', foursomes: 'Foursomes', singles: 'Singles', yellowball: 'Yellow Ball' };
-    return labels[f] || f;
-  };
+  function toggleRound(roundId) {
+    setExpandedRounds(prev => ({ ...prev, [roundId]: !isRoundExpanded(roundId) }));
+  }
+
+  function isRoundExpanded(roundId) {
+    if (expandedRounds[roundId] !== undefined) return expandedRounds[roundId];
+    return rounds[roundId]?.status === 'active';
+  }
+
+  const teamAName = tournament.teamA?.name || 'Northwestern';
+  const teamBName = tournament.teamB?.name || 'Nebraska';
 
   return (
     <div className={styles.page}>
@@ -62,140 +132,141 @@ export default function Leaderboard({ playerId }) {
         <img src="/gb-logo.webp" alt="GrayBull" className={styles.eventLogo} />
       </div>
 
-      {/* Team score banner */}
+      {/* Score bar banner */}
       <div className={styles.scoreBanner}>
-        <div className={`${styles.teamScore} ${styles.teamA}`}>
-          <div className={styles.teamLogoRow}>
-            <TeamLogo teamId="teamA" size={40} />
+        <div className={styles.bannerRow}>
+          <TeamLogo teamId="teamA" size={44} />
+          <div className={styles.barTrack}>
+            {Array.from({ length: numSlots }, (_, i) => {
+              const [leftCls, rightCls] = getSubSegs(getSlotState(i));
+              return (
+                <div key={i} className={styles.pointGroup}>
+                  <div className={`${styles.seg} ${leftCls}`} />
+                  <div className={`${styles.seg} ${rightCls}`} />
+                </div>
+              );
+            })}
           </div>
-          <div className={styles.pts}>{leaderboard?.teamA_pts ?? 0}</div>
+          <TeamLogo teamId="teamB" size={44} />
         </div>
-        <div className={styles.vs}>
-          <div className={styles.vsLabel}>vs</div>
-          <div className={styles.ptsAvail}>{leaderboard?.ptsAvailable ?? 0} pts left</div>
-        </div>
-        <div className={`${styles.teamScore} ${styles.teamB}`}>
-          <div className={styles.teamLogoRow}>
-            <TeamLogo teamId="teamB" size={40} />
-          </div>
-          <div className={styles.pts}>{leaderboard?.teamB_pts ?? 0}</div>
+        <div className={styles.bannerScores}>
+          <span className={styles.scoreA}>{ptsA}</span>
+          <span className={styles.ptsAvailLabel}>{ptsAvail} pts left</span>
+          <span className={styles.scoreB}>{ptsB}</span>
         </div>
       </div>
 
-      {/* Round breakdown */}
+      {/* Rounds with nested matches */}
       {roundList.length > 0 && (
         <div className={styles.section}>
           <div className={styles.sectionLabel}>Rounds</div>
           {roundList.map(([roundId, round]) => {
             const lb = leaderboard?.rounds?.[roundId];
+            const roundMatches = matchesByRound[roundId] || [];
+            const expanded = isRoundExpanded(roundId);
+
             return (
-              <div key={roundId} className={styles.roundRow}>
-                <div className={styles.roundInfo}>
-                  <span className={styles.roundName}>Round {round.order} — {formatLabel(round.format)}</span>
-                  <span className={`${styles.roundStatus} ${round.status === 'active' ? styles.live : ''}`}>
-                    {round.status === 'active' ? 'LIVE' : round.status}
-                  </span>
-                </div>
-                <div className={styles.roundPts}>
-                  <span className={styles.ptA}>{lb?.teamA_pts ?? '—'}</span>
-                  <span className={styles.ptSep}>/</span>
-                  <span className={styles.ptB}>{lb?.teamB_pts ?? '—'}</span>
-                </div>
+              <div key={roundId} className={styles.roundBlock}>
+                {/* Round header row */}
+                <button
+                  className={styles.roundRow}
+                  onClick={() => toggleRound(roundId)}
+                >
+                  <div className={styles.roundInfo}>
+                    <span className={styles.roundName}>Round {round.order} — {formatLabel(round.format)}</span>
+                    <span className={`${styles.roundStatus} ${round.status === 'active' ? styles.live : ''}`}>
+                      {round.status === 'active' ? 'LIVE' : round.status}
+                    </span>
+                  </div>
+                  <div className={styles.roundRight}>
+                    <div className={styles.roundPts}>
+                      <span className={styles.ptA}>{lb?.teamA_pts ?? '—'}</span>
+                      <span className={styles.ptSep}>/</span>
+                      <span className={styles.ptB}>{lb?.teamB_pts ?? '—'}</span>
+                    </div>
+                    <span className={styles.chevron}>{expanded ? '▲' : '▼'}</span>
+                  </div>
+                </button>
+
+                {/* Nested match cards */}
+                {expanded && roundMatches.map(([matchId, match]) => {
+                  const matchHoles = allHoles[matchId] || {};
+                  const { diff, holesPlayed } = computeMatchInfo(matchHoles);
+                  const remaining = 18 - holesPlayed;
+                  const margin = Math.abs(diff);
+
+                  let leader = null;
+                  if (holesPlayed > 0 && diff !== 0) {
+                    leader = diff > 0 ? 'teamA' : 'teamB';
+                  }
+
+                  const teamANames = match.teamA?.playerIds?.map(id => players[id]?.name?.split(' ')[0] || id).join(' & ') || '—';
+                  const teamBNames = match.teamB?.playerIds?.map(id => players[id]?.name?.split(' ')[0] || id).join(' & ') || '—';
+
+                  return (
+                    <button
+                      key={matchId}
+                      className={styles.matchCard}
+                      onClick={() => navigate(`/match/${matchId}`)}
+                    >
+                      <div className={styles.mcInfoRow}>
+                        <div className={styles.mcSide}>
+                          <div className={styles.mcTeamRow}>
+                            <TeamLogo teamId="teamA" size={18} />
+                            <span className={styles.mcNameA}>{teamANames}</span>
+                          </div>
+                          {leader === 'teamA' && (
+                            <span className={styles.mcUp} style={{ color: 'var(--teamA)', paddingLeft: 24 }}>
+                              {margin > remaining ? `${margin}&${remaining}` : `${margin}UP`}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className={styles.mcCenter}>
+                          {leader === null && holesPlayed > 0 && (
+                            <span className={styles.mcAllSquare}>All Square</span>
+                          )}
+                          <span className={styles.mcThruText}>
+                            {holesPlayed > 0 ? `Thru ${holesPlayed}` : match.status === 'active' ? 'Starting' : '—'}
+                          </span>
+                        </div>
+
+                        <div className={`${styles.mcSide} ${styles.mcSideRight}`}>
+                          <div className={`${styles.mcTeamRow} ${styles.mcTeamRowRight}`}>
+                            <span className={styles.mcNameB}>{teamBNames}</span>
+                            <TeamLogo teamId="teamB" size={18} />
+                          </div>
+                          {leader === 'teamB' && (
+                            <span className={styles.mcUp} style={{ color: 'var(--teamB)', paddingRight: 24 }}>
+                              {margin > remaining ? `${margin}&${remaining}` : `${margin}UP`}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className={styles.mcHoleStrip}>
+                        {Array.from({ length: 18 }, (_, i) => i + 1).map((h) => {
+                          const winner = matchHoles[h]?.holeWinner;
+                          const dotClass = winner === 'teamA' ? styles.mcDotA
+                            : winner === 'teamB' ? styles.mcDotB
+                            : winner === 'half' ? styles.mcDotHalf
+                            : styles.mcDotEmpty;
+                          return (
+                            <div key={h} className={`${styles.mcHoleDot} ${dotClass}`}>
+                              <span className={styles.mcDotNum}>{h}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             );
           })}
         </div>
       )}
 
-      {/* Active matches */}
-      {activeMatches.length > 0 && (
-        <div className={styles.section}>
-          <div className={styles.sectionLabel}>Live Matches</div>
-          {activeMatches.map(([matchId, match]) => {
-            const matchHoles = allHoles[matchId] || {};
-            const { diff, holesPlayed } = computeMatchInfo(matchHoles);
-            const remaining = 18 - holesPlayed;
-            const margin = Math.abs(diff);
-
-            let statusText, leader;
-            if (holesPlayed === 0 || diff === 0) {
-              statusText = 'All Square';
-              leader = null;
-            } else {
-              leader = diff > 0 ? 'teamA' : 'teamB';
-              const leadName = diff > 0 ? teamAName : teamBName;
-              statusText = margin > remaining
-                ? `${leadName} wins ${margin}&${remaining}`
-                : `${leadName} ${margin}UP`;
-            }
-            const thruText = holesPlayed === 0 ? 'Not started' : `Thru ${holesPlayed}`;
-
-            const teamANames = match.teamA?.playerIds?.map(id => players[id]?.name?.split(' ')[0] || id).join(' & ') || '—';
-            const teamBNames = match.teamB?.playerIds?.map(id => players[id]?.name?.split(' ')[0] || id).join(' & ') || '—';
-
-            return (
-              <button
-                key={matchId}
-                className={styles.matchCard}
-                onClick={() => navigate(`/match/${matchId}`)}
-              >
-                {/* 3-column info row */}
-                <div className={styles.mcInfoRow}>
-                  {/* Left: Team A */}
-                  <div className={styles.mcSide}>
-                    <div className={styles.mcTeamRow}>
-                      <TeamLogo teamId="teamA" size={20} />
-                      <span className={styles.mcNameA}>{teamANames}</span>
-                    </div>
-                    {leader === 'teamA' && (
-                      <span className={styles.mcUp} style={{ color: 'var(--teamA)', paddingLeft: 26 }}>{margin}UP</span>
-                    )}
-                  </div>
-
-                  {/* Center: thru / all square */}
-                  <div className={styles.mcCenter}>
-                    {leader === null && holesPlayed > 0 && (
-                      <span className={styles.mcAllSquare}>All Square</span>
-                    )}
-                    <span className={styles.mcThruText}>
-                      {holesPlayed > 0 ? `Thru ${holesPlayed}` : '—'}
-                    </span>
-                  </div>
-
-                  {/* Right: Team B */}
-                  <div className={`${styles.mcSide} ${styles.mcSideRight}`}>
-                    <div className={`${styles.mcTeamRow} ${styles.mcTeamRowRight}`}>
-                      <span className={styles.mcNameB}>{teamBNames}</span>
-                      <TeamLogo teamId="teamB" size={20} />
-                    </div>
-                    {leader === 'teamB' && (
-                      <span className={styles.mcUp} style={{ color: 'var(--teamB)', paddingRight: 26 }}>{margin}UP</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Full-width hole strip */}
-                <div className={styles.mcHoleStrip}>
-                  {Array.from({ length: 18 }, (_, i) => i + 1).map((h) => {
-                    const winner = matchHoles[h]?.holeWinner;
-                    const dotClass = winner === 'teamA' ? styles.mcDotA
-                      : winner === 'teamB' ? styles.mcDotB
-                      : winner === 'half' ? styles.mcDotHalf
-                      : styles.mcDotEmpty;
-                    return (
-                      <div key={h} className={`${styles.mcHoleDot} ${dotClass}`}>
-                        <span className={styles.mcDotNum}>{h}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Spectator / no player banner */}
       {!playerId && (
         <button className={styles.joinBtn} onClick={() => navigate('/select')}>
           Select your name to enter scores

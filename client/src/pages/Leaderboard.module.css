@@ -16,91 +16,79 @@
   object-fit: contain;
 }
 
-/* Score banner */
+/* ── Score bar banner ── */
 .scoreBanner {
-  display: flex;
-  align-items: stretch;
   background: var(--surface);
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  overflow: hidden;
+  padding: 16px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
-.teamScore {
-  flex: 1;
-  padding: 18px 14px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.teamScore.teamA {
-  border-left: 5px solid var(--teamA);
-  background: linear-gradient(135deg, rgba(78,42,132,0.04) 0%, transparent 60%);
-}
-
-.teamScore.teamB {
-  border-right: 5px solid var(--teamB);
-  align-items: flex-end;
-  background: linear-gradient(225deg, rgba(208,0,0,0.04) 0%, transparent 60%);
-}
-
-.teamLogoRow {
+.bannerRow {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.teamScore.teamB .teamLogoRow {
-  flex-direction: row-reverse;
+.barTrack {
+  flex: 1;
+  display: flex;
+  gap: 4px;
+  height: 36px;
 }
 
-.teamName {
-  font-size: 14px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+/* Each pointGroup = 1 point, split into 2 half-sub-segs */
+.pointGroup {
+  flex: 1;
+  display: flex;
+  gap: 1px;
 }
 
-.teamScore.teamA .teamName { color: var(--teamA); }
-.teamScore.teamB .teamName { color: var(--teamB); }
+.seg {
+  flex: 1;
+  border-radius: 2px;
+}
 
-.pts {
-  font-size: 52px;
+.segA { background: var(--teamA); }
+.segLiveA { background: color-mix(in srgb, var(--teamA) 28%, var(--surface2)); }
+.segB { background: var(--teamB); }
+.segLiveB { background: color-mix(in srgb, var(--teamB) 28%, var(--surface2)); }
+.segEmpty { background: var(--surface2); }
+
+.bannerScores {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 54px;
+}
+
+.scoreA {
+  font-size: 40px;
   font-weight: 900;
+  color: var(--teamA);
   line-height: 1;
   letter-spacing: -0.03em;
 }
 
-.teamScore.teamA .pts { color: var(--teamA); }
-.teamScore.teamB .pts { color: var(--teamB); }
-
-.vs {
-  padding: 0 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  flex-shrink: 0;
+.scoreB {
+  font-size: 40px;
+  font-weight: 900;
+  color: var(--teamB);
+  line-height: 1;
+  letter-spacing: -0.03em;
 }
 
-.vsLabel {
-  font-size: 13px;
-  font-weight: 700;
+.ptsAvailLabel {
+  font-size: 11px;
   color: var(--text-muted);
+  font-weight: 500;
 }
 
-.ptsAvail {
-  font-size: 10px;
-  color: var(--text-muted);
-  text-align: center;
-  white-space: nowrap;
-}
-
-/* Sections */
+/* ── Sections ── */
 .section {}
 
 .sectionLabel {
@@ -112,6 +100,11 @@
   margin-bottom: 10px;
 }
 
+/* ── Round block (header + nested matches) ── */
+.roundBlock {
+  margin-bottom: 8px;
+}
+
 .roundRow {
   display: flex;
   align-items: center;
@@ -120,8 +113,10 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 12px 14px;
-  margin-bottom: 6px;
+  width: 100%;
+  text-align: left;
 }
+
 
 .roundInfo {
   display: flex;
@@ -132,7 +127,6 @@
 .roundName {
   font-size: 15px;
   font-weight: 600;
-  text-transform: capitalize;
 }
 
 .roundStatus {
@@ -150,6 +144,12 @@
   color: var(--green);
 }
 
+.roundRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .roundPts {
   display: flex;
   align-items: center;
@@ -162,20 +162,26 @@
 .ptB { color: var(--teamB); }
 .ptSep { color: var(--text-muted); font-weight: 400; }
 
+.chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ── Match cards (nested under round) ── */
 .matchCard {
   display: flex;
   flex-direction: column;
   gap: 10px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 14px 14px 12px;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
   width: 100%;
   text-align: left;
-  margin-bottom: 8px;
+  margin-top: 6px;
 }
 
-/* 3-column info row */
+/* ── Match card internals ── */
 .mcInfoRow {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -266,27 +272,19 @@
   line-height: 1;
 }
 
-.mcDotEmpty {
-  background: var(--surface2);
-}
+.mcDotEmpty { background: var(--surface2); }
 .mcDotEmpty .mcDotNum { color: var(--text-muted); }
 
-.mcDotA {
-  background: var(--teamA);
-}
+.mcDotA { background: var(--teamA); }
 .mcDotA .mcDotNum { color: white; }
 
-.mcDotB {
-  background: var(--teamB);
-}
+.mcDotB { background: var(--teamB); }
 .mcDotB .mcDotNum { color: white; }
 
-.mcDotHalf {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-}
+.mcDotHalf { background: var(--surface2); border: 1px solid var(--border); }
 .mcDotHalf .mcDotNum { color: var(--text-muted); }
 
+/* ── Other ── */
 .joinBtn {
   background: var(--teamA);
   color: white;
