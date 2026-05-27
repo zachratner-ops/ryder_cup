@@ -63,10 +63,11 @@ export default function Leaderboard({ playerId }) {
   let liveBPoints = 0;
   Object.entries(matches).forEach(([matchId, match]) => {
     if (match.status !== 'active') return;
-    const { diff } = computeMatchInfo(allHoles[matchId] || {});
+    const { diff, holesPlayed } = computeMatchInfo(allHoles[matchId] || {});
     const pts = rounds[match.roundId]?.pointsValue || 1;
     if (diff > 0) liveAPoints += pts;
     else if (diff < 0) liveBPoints += pts;
+    else if (holesPlayed > 0) { liveAPoints += pts / 2; liveBPoints += pts / 2; } // all square = half each
   });
 
   // Boundaries: A fills from left, B fills from right, live fills adjacent gaps
@@ -169,7 +170,7 @@ export default function Leaderboard({ playerId }) {
               <div key={roundId} className={styles.roundBlock}>
                 {/* Round header row */}
                 <button
-                  className={styles.roundRow}
+                  className={`${styles.roundRow} ${round.status === 'active' ? styles.roundRowActive : round.status === 'complete' ? styles.roundRowComplete : ''}`}
                   onClick={() => toggleRound(roundId)}
                 >
                   <div className={styles.roundInfo}>

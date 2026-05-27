@@ -102,7 +102,7 @@
 
 /* ── Round block (header + nested matches) ── */
 .roundBlock {
-  margin-bottom: 8px;
+  margin-bottom: 20px;
 }
 
 .roundRow {
@@ -115,6 +115,17 @@
   padding: 12px 14px;
   width: 100%;
   text-align: left;
+}
+
+/* Active round: green tint + top accent border */
+.roundRowActive {
+  background: color-mix(in srgb, var(--green) 6%, var(--surface));
+  border-top: 3px solid var(--green);
+}
+
+/* Complete round: slightly grayed out to recede visually */
+.roundRowComplete {
+  background: var(--surface2);
 }
 
 

@@ -174,7 +174,8 @@ export default function Match({ playerId, isAdmin }) {
     setJustSaved(true);
     setTimeout(() => {
       setJustSaved(false);
-      if (currentHole < 18) setCurrentHole(h => h + 1);
+      // Admin stays on the same hole so they can move to the next player
+      if (!isAdmin && currentHole < 18) setCurrentHole(h => h + 1);
     }, 900);
   }
 
