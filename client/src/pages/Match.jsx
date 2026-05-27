@@ -595,7 +595,7 @@ export default function Match({ playerId, isAdmin }) {
           <div className={styles.scorecardGrid}>
             <div
               className={`${styles.scRow} ${styles.scHeader}`}
-              style={{ gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 48px` }}
+              style={{ gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 26px 48px` }}
             >
               <span />
               {allPlayerIds.map((id) => {
@@ -611,11 +611,12 @@ export default function Match({ playerId, isAdmin }) {
                   </span>
                 );
               })}
-              <span />
+              <span /><span />
             </div>
 
             {Array.from({ length: 18 }, (_, i) => i + 1).map((h) => {
               const hd = holeData[h] || {};
+              const winner = hd.holeWinner;
               const holePar = courseHoles[h]?.par;
 
               const carriers = new Set();
@@ -627,10 +628,10 @@ export default function Match({ playerId, isAdmin }) {
                 nets.filter((x) => x.net === best).forEach((x) => carriers.add(x.id));
               });
 
-              const gridStyle = { gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 48px` };
+              const gridStyle = { gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 26px 48px` };
               const isLastPlayed = !!hd.holeWinner && !holeData[h + 1]?.holeWinner;
 
-              // Running match status for this hole's rightmost column
+              // Running match status for the rightmost column
               const st = scorecardStatus[h];
               const stColor = st?.team === 'teamA' ? 'var(--teamA)'
                 : st?.team === 'teamB' ? 'var(--teamB)'
@@ -664,6 +665,11 @@ export default function Match({ playerId, isAdmin }) {
                       </span>
                     );
                   })}
+                  {/* Hole winner icon */}
+                  <span className={styles.scWinner}>
+                    {winner === 'half' ? <span className={styles.halfMark}>½</span> : winner ? <TeamLogo teamId={winner} size={18} /> : null}
+                  </span>
+                  {/* Running match score */}
                   <span className={styles.scStatus} style={st ? { color: stColor } : {}}>
                     {st?.text ?? ''}
                   </span>
@@ -695,7 +701,7 @@ export default function Match({ playerId, isAdmin }) {
                       <span className={styles.dotSlot} />
                     </span>
                   ))}
-                  <span />
+                  <span /><span />
                 </div>,
               ];
             })}

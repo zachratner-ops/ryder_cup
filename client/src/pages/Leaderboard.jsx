@@ -8,14 +8,21 @@ import styles from './Leaderboard.module.css';
 function computeMatchInfo(matchHoles) {
   let diff = 0;
   let holesPlayed = 0;
+  let decidedMargin = null, decidedRemaining = null;
   for (let h = 1; h <= 18; h++) {
     const hole = matchHoles?.[h];
     if (!hole?.holeWinner) continue;
     holesPlayed++;
     if (hole.holeWinner === 'teamA') diff++;
     else if (hole.holeWinner === 'teamB') diff--;
+    // Detect match decided: capture margin & remaining at the closing hole
+    if (decidedMargin === null) {
+      const margin = Math.abs(diff);
+      const remaining = 18 - holesPlayed;
+      if (margin > remaining) { decidedMargin = margin; decidedRemaining = remaining; }
+    }
   }
-  return { diff, holesPlayed };
+  return { diff, holesPlayed, decidedMargin, decidedRemaining };
 }
 
 // Yellow ball: cumulative stroke differential (lower = better)
@@ -215,7 +222,7 @@ export default function Leaderboard({ playerId }) {
                   const isYB = match.format === 'yellowball';
 
                   // Compute who's leading and by how much
-                  let holesPlayed, leader, margin;
+                  let holesPlayed, leader, margin, decidedMargin = null, decidedRemaining = null;
                   if (isYB) {
                     const info = computeYBInfo(matchHoles);
                     holesPlayed = info.holesPlayed;
@@ -228,9 +235,9 @@ export default function Leaderboard({ playerId }) {
                     leader = info.holesPlayed > 0 && info.diff !== 0
                       ? (info.diff > 0 ? 'teamA' : 'teamB') : null;
                     margin = Math.abs(info.diff);
+                    decidedMargin = info.decidedMargin;
+                    decidedRemaining = info.decidedRemaining;
                   }
-
-                  const remaining = 18 - holesPlayed;
 
                   // YB shows team names; match play shows player first names
                   const displayA = isYB
@@ -240,10 +247,10 @@ export default function Leaderboard({ playerId }) {
                     ? teamBName
                     : match.teamB?.playerIds?.map(id => players[id]?.name?.split(' ')[0] || id).join(' & ') || '—';
 
-                  // Lead text: "Leads by N stroke(s)" for YB; "NUP" / "N&R" for match play
+                  // Lead text: "Up by N stroke(s)" for YB; "N&R" (decided) or "NUP" for match play
                   const leadText = isYB
                     ? `Up by ${margin} stroke${margin !== 1 ? 's' : ''}`
-                    : margin > remaining ? `${margin}&${remaining}` : `${margin}UP`;
+                    : decidedMargin != null ? `${decidedMargin}&${decidedRemaining}` : `${margin}UP`;
 
                   return (
                     <button
