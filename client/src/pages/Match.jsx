@@ -252,22 +252,60 @@ export default function Match({ playerId }) {
       <div className={styles.scorecard}>
         <div className={styles.sectionLabel}>Scorecard</div>
         <div className={styles.scorecardGrid}>
-          <div
-            className={styles.scRow + ' ' + styles.scHeader}
-            style={{ gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 26px` }}
-          >
-            <span style={{ textAlign: 'center' }}>Hole</span>
-            {allPlayerIds.map((id) => (
-              <span key={id} style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
-                <span>{players[id]?.name?.split(' ')[0] || id}</span>
-                <span style={{ fontSize: '10px', fontWeight: 400, opacity: 0.7, textTransform: 'none', letterSpacing: 0 }}>hcp {players[id]?.handicap ?? '—'}</span>
-              </span>
-            ))}
-            <span style={{ textAlign: 'center' }}>Win</span>
-          </div>
+          {/* 3-row scorecard header */}
+          {(() => {
+            const gs = { gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 26px` };
+            const toParData = allPlayerIds.map(id => {
+              let sum = 0, played = 0;
+              for (let h = 1; h <= 18; h++) {
+                const s = holeData[h]?.[id];
+                const par = courseHoles[h]?.par;
+                if (s?.gross && par) { sum += s.gross - par; played++; }
+              }
+              const str = played === 0 ? null : sum === 0 ? 'E' : sum > 0 ? `+${sum}` : `${sum}`;
+              const color = sum < 0 ? 'var(--green)' : sum > 0 ? '#c0392b' : 'var(--text-muted)';
+              return { str, color };
+            });
+            return (
+              <>
+                <div style={gs} className={`${styles.scRow} ${styles.scHeaderNames}`}>
+                  <span />
+                  {allPlayerIds.map((id) => {
+                    const isTeamA = match.teamA?.playerIds?.includes(id);
+                    return (
+                      <span key={id} className={styles.scHeaderName} style={{ color: isTeamA ? 'var(--teamA)' : 'var(--teamB)' }}>
+                        {players[id]?.name?.split(' ')[0] || id}
+                      </span>
+                    );
+                  })}
+                  <span />
+                </div>
+                <div style={gs} className={`${styles.scRow} ${styles.scHeaderSub}`}>
+                  <span />
+                  {allPlayerIds.map((id) => (
+                    <span key={id} className={styles.scHeaderSubCell}>hcp {players[id]?.handicap ?? '—'}</span>
+                  ))}
+                  <span />
+                </div>
+                <div style={gs} className={`${styles.scRow} ${styles.scHeaderToPar}`}>
+                  <span />
+                  {allPlayerIds.map((id, i) => {
+                    const { str, color } = toParData[i];
+                    return (
+                      <span key={id} className={styles.scHeaderSubCell} style={{ color: str ? color : 'var(--text-muted)', fontWeight: str ? 700 : 400 }}>
+                        {str ?? '—'}
+                      </span>
+                    );
+                  })}
+                  <span />
+                </div>
+              </>
+            );
+          })()}
           {Array.from({ length: 18 }, (_, i) => i + 1).map((h) => {
             const hd = holeData[h] || {};
             const winner = hd.holeWinner;
+            const holePar = courseHoles[h]?.par;
 
             const carriers = new Set();
             ['teamA', 'teamB'].forEach((team) => {
@@ -288,10 +326,17 @@ export default function Match({ playerId }) {
                   const isCarrier = carriers.has(id);
                   const isTeamA = match.teamA?.playerIds?.includes(id);
                   const carrierClass = isCarrier ? (isTeamA ? styles.carrierA : styles.carrierB) : '';
+                  const scoreDiff = (s?.gross && holePar) ? s.gross - holePar : null;
+                  const shapeClass = scoreDiff === null ? ''
+                    : scoreDiff <= -2 ? styles.scoreEagle
+                    : scoreDiff === -1 ? styles.scoreBirdie
+                    : scoreDiff === 1 ? styles.scoreBogey
+                    : scoreDiff >= 2 ? styles.scoreDouble
+                    : '';
                   return (
                     <span key={id} className={styles.scScore}>
                       <span className={styles.dotSlot} />
-                      <span className={`${styles.scorePill} ${carrierClass}`}>
+                      <span className={`${styles.scorePill} ${carrierClass} ${shapeClass}`}>
                         {s ? s.gross : '—'}
                       </span>
                       <span className={styles.dotSlot}>
