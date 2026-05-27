@@ -219,10 +219,13 @@ export default function Match({ playerId }) {
       <div className={styles.scorecard}>
         <div className={styles.sectionLabel}>Scorecard</div>
         <div className={styles.scorecardGrid}>
-          <div className={styles.scRow + ' ' + styles.scHeader}>
-            <span>Hole</span>
-            {allPlayerIds.map((id) => <span key={id}>{players[id]?.name?.split(' ')[0] || id}</span>)}
-            <span>Win</span>
+          <div
+            className={styles.scRow + ' ' + styles.scHeader}
+            style={{ gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 32px` }}
+          >
+            <span style={{ textAlign: 'center' }}>Hole</span>
+            {allPlayerIds.map((id) => <span key={id} style={{ textAlign: 'center' }}>{players[id]?.name?.split(' ')[0] || id}</span>)}
+            <span style={{ textAlign: 'center' }}>Win</span>
           </div>
           {Array.from({ length: 18 }, (_, i) => i + 1).map((h) => {
             const hd = holeData[h] || {};
@@ -238,8 +241,9 @@ export default function Match({ playerId }) {
               nets.filter((x) => x.net === best).forEach((x) => carriers.add(x.id));
             });
 
+            const gridStyle = { gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 32px` };
             return (
-              <div key={h} className={`${styles.scRow} ${h === currentHole ? styles.scCurrent : ''}`}>
+              <div key={h} style={gridStyle} className={`${styles.scRow} ${h === currentHole ? styles.scCurrent : ''}`}>
                 <span className={styles.scHole}>{h}</span>
                 {allPlayerIds.map((id) => {
                   const s = hd[id];
@@ -251,8 +255,8 @@ export default function Match({ playerId }) {
                       key={id}
                       className={`${styles.scScore} ${isCarrier ? (isTeamA ? styles.carrierA : styles.carrierB) : ''}`}
                     >
-                      <span>{s ? s.gross : '—'}</span>
-                      {alloc.includes(h) && <span className={styles.strokeMark}>●</span>}
+                      {s ? s.gross : '—'}
+                      {alloc.includes(h) && <span className={styles.strokeMark} />}
                     </span>
                   );
                 })}

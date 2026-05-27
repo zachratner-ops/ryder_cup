@@ -263,30 +263,41 @@
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
-.scHole { font-weight: 700; }
+.scHole {
+  font-weight: 700;
+  text-align: center;
+  font-size: 13px;
+}
 
 .scScore {
   text-align: center;
+  font-size: 13px;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 1px;
+  justify-content: center;
+  gap: 3px;
+  border-radius: 5px;
+  padding: 3px 2px;
 }
 
 .strokeMark {
-  color: var(--yellow);
-  font-size: 6px;
-  line-height: 1;
+  width: 5px;
+  height: 5px;
+  background: var(--yellow);
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .carrierA {
+  background: color-mix(in srgb, var(--teamA) 14%, transparent);
   color: var(--teamA);
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .carrierB {
+  background: color-mix(in srgb, var(--teamB) 14%, transparent);
   color: var(--teamB);
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .scWinner {
@@ -299,7 +310,7 @@
 .halfMark {
   font-weight: 700;
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .bottomPad { height: 20px; }
