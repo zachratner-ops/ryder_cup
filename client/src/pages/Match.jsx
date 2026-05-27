@@ -251,7 +251,8 @@ export default function Match({ playerId, isAdmin }) {
 
   // Per-team tab: 4-player grid with carrier highlighted (stroke play — no winner column, no summary row)
   function renderYBTeamTab(team) {
-    const tabIds = match[team]?.playerIds || [];
+    // Use carrier rotation order for columns so players appear in order of play
+    const tabIds = carrierOrder?.[team] || match[team]?.playerIds || [];
     const teamColor = team === 'teamA' ? 'var(--teamA)' : 'var(--teamB)';
     const gridStyle = { gridTemplateColumns: `28px repeat(${tabIds.length}, 1fr)` };
 
