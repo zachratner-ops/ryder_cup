@@ -252,56 +252,27 @@ export default function Match({ playerId }) {
       <div className={styles.scorecard}>
         <div className={styles.sectionLabel}>Scorecard</div>
         <div className={styles.scorecardGrid}>
-          {/* 3-row scorecard header */}
-          {(() => {
-            const gs = { gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 26px` };
-            const toParData = allPlayerIds.map(id => {
-              let sum = 0, played = 0;
-              for (let h = 1; h <= 18; h++) {
-                const s = holeData[h]?.[id];
-                const par = courseHoles[h]?.par;
-                if (s?.gross && par) { sum += s.gross - par; played++; }
-              }
-              const str = played === 0 ? null : sum === 0 ? 'E' : sum > 0 ? `+${sum}` : `${sum}`;
-              const color = sum < 0 ? 'var(--green)' : sum > 0 ? '#c0392b' : 'var(--text-muted)';
-              return { str, color };
-            });
-            return (
-              <>
-                <div style={gs} className={`${styles.scRow} ${styles.scHeaderNames}`}>
-                  <span />
-                  {allPlayerIds.map((id) => {
-                    const isTeamA = match.teamA?.playerIds?.includes(id);
-                    return (
-                      <span key={id} className={styles.scHeaderName} style={{ color: isTeamA ? 'var(--teamA)' : 'var(--teamB)' }}>
-                        {players[id]?.name?.split(' ')[0] || id}
-                      </span>
-                    );
-                  })}
-                  <span />
-                </div>
-                <div style={gs} className={`${styles.scRow} ${styles.scHeaderSub}`}>
-                  <span />
-                  {allPlayerIds.map((id) => (
-                    <span key={id} className={styles.scHeaderSubCell}>hcp {players[id]?.handicap ?? '—'}</span>
-                  ))}
-                  <span />
-                </div>
-                <div style={gs} className={`${styles.scRow} ${styles.scHeaderToPar}`}>
-                  <span />
-                  {allPlayerIds.map((id, i) => {
-                    const { str, color } = toParData[i];
-                    return (
-                      <span key={id} className={styles.scHeaderSubCell} style={{ color: str ? color : 'var(--text-muted)', fontWeight: str ? 700 : 400 }}>
-                        {str ?? '—'}
-                      </span>
-                    );
-                  })}
-                  <span />
-                </div>
-              </>
-            );
-          })()}
+          {/* Compact single header row */}
+          <div
+            className={`${styles.scRow} ${styles.scHeader}`}
+            style={{ gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 26px` }}
+          >
+            <span />
+            {allPlayerIds.map((id) => {
+              const isTeamA = match.teamA?.playerIds?.includes(id);
+              return (
+                <span key={id} style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                  <span style={{ color: isTeamA ? 'var(--teamA)' : 'var(--teamB)', fontWeight: 700, fontSize: '13px' }}>
+                    {players[id]?.name?.split(' ')[0] || id}
+                  </span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 400 }}>
+                    hcp {players[id]?.handicap ?? '—'}
+                  </span>
+                </span>
+              );
+            })}
+            <span />
+          </div>
           {Array.from({ length: 18 }, (_, i) => i + 1).map((h) => {
             const hd = holeData[h] || {};
             const winner = hd.holeWinner;
@@ -317,8 +288,10 @@ export default function Match({ playerId }) {
             });
 
             const gridStyle = { gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 26px` };
-            return (
-              <div key={h} style={gridStyle} className={`${styles.scRow} ${h === currentHole ? styles.scCurrent : ''}`}>
+            const isLastPlayed = !!hd.holeWinner && !holeData[h + 1]?.holeWinner;
+
+            const holeRow = (
+              <div key={`hole-${h}`} style={gridStyle} className={`${styles.scRow} ${h === currentHole ? styles.scCurrent : ''}`}>
                 <span className={styles.scHole}>{h}</span>
                 {allPlayerIds.map((id) => {
                   const s = hd[id];
@@ -350,6 +323,36 @@ export default function Match({ playerId }) {
                 </span>
               </div>
             );
+
+            if (!isLastPlayed) return holeRow;
+
+            // To-par summary row — pinned right after the last completed hole
+            const toParCells = allPlayerIds.map(id => {
+              let sum = 0, played = 0;
+              for (let hh = 1; hh <= 18; hh++) {
+                const s = holeData[hh]?.[id];
+                const par = courseHoles[hh]?.par;
+                if (s?.gross && par) { sum += s.gross - par; played++; }
+              }
+              const str = played === 0 ? '—' : sum === 0 ? 'E' : sum > 0 ? `+${sum}` : `${sum}`;
+              const color = sum < 0 ? 'var(--green)' : sum > 0 ? '#c0392b' : 'var(--text-muted)';
+              return { id, str, color };
+            });
+
+            return [
+              holeRow,
+              <div key={`topar-${h}`} style={gridStyle} className={`${styles.scRow} ${styles.scTotalRow}`}>
+                <span className={styles.scHole} style={{ fontSize: 9, color: 'var(--text-muted)' }}>vs par</span>
+                {toParCells.map(({ id, str, color }) => (
+                  <span key={id} className={styles.scScore}>
+                    <span className={styles.dotSlot} />
+                    <span className={`${styles.scorePill}`} style={{ color, fontWeight: 700 }}>{str}</span>
+                    <span className={styles.dotSlot} />
+                  </span>
+                ))}
+                <span />
+              </div>,
+            ];
           })}
         </div>
       </div>
