@@ -1,0 +1,273 @@
+.page {
+  padding: 0 0 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.loading {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 60px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 0;
+}
+
+.back {
+  font-size: 17px;
+  color: var(--accent);
+  padding: 4px 0;
+}
+
+.matchStatus {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.teams {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 16px;
+}
+
+.teamPill {
+  flex: 1;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 10px;
+  border-radius: 20px;
+}
+
+.teamA { background: color-mix(in srgb, var(--teamA) 15%, transparent); color: var(--teamA); }
+.teamB { background: color-mix(in srgb, var(--teamB) 15%, transparent); color: var(--teamB); }
+
+.vsLabel {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Hole navigation strip */
+.holeNav {
+  display: flex;
+  overflow-x: auto;
+  gap: 6px;
+  padding: 0 16px;
+  scrollbar-width: none;
+}
+
+.holeNav::-webkit-scrollbar { display: none; }
+
+.holeBtn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.holeCurrent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.holeDone {
+  background: color-mix(in srgb, var(--green) 20%, transparent);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+/* Hole info bar */
+.holeInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+}
+
+.holeLabel {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.holePar, .holeSI {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.strokeDot {
+  font-size: 12px;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--yellow) 20%, transparent);
+  color: var(--yellow);
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+
+/* Entry card */
+.entryCard {
+  margin: 0 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.entryLabel {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.field label {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.stepper button {
+  width: 44px;
+  height: 44px;
+  font-size: 22px;
+  color: var(--accent);
+  background: transparent;
+}
+
+.stepperVal {
+  width: 44px;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.netScore {
+  font-size: 14px;
+  color: var(--green);
+  font-weight: 600;
+  margin-top: -8px;
+}
+
+.toggle {
+  display: flex;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.toggle button {
+  padding: 10px 18px;
+  font-size: 15px;
+  font-weight: 500;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.toggleOn {
+  background: var(--green) !important;
+  color: white !important;
+}
+
+.toggleOff {
+  background: color-mix(in srgb, var(--teamA) 20%, transparent) !important;
+  color: var(--teamA) !important;
+}
+
+.submitBtn {
+  background: var(--accent);
+  color: white;
+  border-radius: var(--radius);
+  padding: 16px;
+  font-size: 17px;
+  font-weight: 700;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.submitBtn:disabled {
+  opacity: 0.4;
+}
+
+/* Scorecard */
+.scorecard {
+  padding: 0 16px;
+}
+
+.sectionLabel {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.scorecardGrid {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.scRow {
+  display: grid;
+  grid-template-columns: 32px repeat(auto-fill, minmax(48px, 1fr)) 40px;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 12px;
+  font-size: 13px;
+  align-items: center;
+  gap: 4px;
+}
+
+.scRow:last-child { border-bottom: none; }
+
+.scHeader {
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.scCurrent {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.scHole { font-weight: 700; }
+.scScore { text-align: center; }
+.scWinner { text-align: center; font-weight: 700; }
+
+.scRow .teamA { color: var(--teamA); }
+.scRow .teamB { color: var(--teamB); }
+
+.bottomPad { height: 20px; }

@@ -1,0 +1,118 @@
+.page {
+  padding: 24px 16px 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-height: 100dvh;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.currentBadge {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.currentBadge strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.section {}
+
+.sectionLabel {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.team {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.teamLabel {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0 4px 4px;
+}
+
+.teamA { color: var(--teamA); }
+.teamB { color: var(--teamB); }
+
+.playerBtn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  width: 100%;
+  text-align: left;
+  font-size: 17px;
+  font-weight: 500;
+  min-height: 56px;
+  transition: border-color 0.15s;
+}
+
+.playerBtn:active {
+  background: var(--surface2);
+}
+
+.selected {
+  border-color: var(--teamA);
+  background: rgba(78, 42, 132, 0.04);
+}
+
+.playerName {}
+
+.playerMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.youBadge {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--teamA);
+  background: rgba(78, 42, 132, 0.1);
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.activeDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--yellow);
+}
+
+.spectateBtn {
+  margin-top: auto;
+  color: var(--text-muted);
+  font-size: 15px;
+  text-align: center;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  width: 100%;
+}

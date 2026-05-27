@@ -1,0 +1,32 @@
+{
+  "rules": {
+    ".read": true,
+    "tournament": {
+      ".write": false,
+      "adminPin": {
+        ".read": false
+      }
+    },
+    "players": {
+      ".write": true
+    },
+    "course": {
+      ".write": false
+    },
+    "rounds": {
+      ".write": false
+    },
+    "matches": {
+      ".write": false
+    },
+    "holes": {
+      ".write": true
+    },
+    "leaderboard": {
+      ".write": false
+    },
+    "activeSessions": {
+      ".write": true
+    }
+  }
+}

@@ -1,0 +1,225 @@
+.page {
+  padding: 0 16px 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.header {
+  text-align: center;
+  padding: 20px 0 4px;
+}
+
+.eventLogo {
+  height: 80px;
+  width: auto;
+  object-fit: contain;
+}
+
+/* Score banner */
+.scoreBanner {
+  display: flex;
+  align-items: stretch;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.teamScore {
+  flex: 1;
+  padding: 18px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.teamScore.teamA {
+  border-left: 5px solid var(--teamA);
+  background: linear-gradient(135deg, rgba(78,42,132,0.04) 0%, transparent 60%);
+}
+
+.teamScore.teamB {
+  border-right: 5px solid var(--teamB);
+  align-items: flex-end;
+  background: linear-gradient(225deg, rgba(208,0,0,0.04) 0%, transparent 60%);
+}
+
+.teamLogoRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.teamScore.teamB .teamLogoRow {
+  flex-direction: row-reverse;
+}
+
+.teamName {
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.teamScore.teamA .teamName { color: var(--teamA); }
+.teamScore.teamB .teamName { color: var(--teamB); }
+
+.pts {
+  font-size: 52px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.teamScore.teamA .pts { color: var(--teamA); }
+.teamScore.teamB .pts { color: var(--teamB); }
+
+.vs {
+  padding: 0 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.vsLabel {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.ptsAvail {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Sections */
+.section {}
+
+.sectionLabel {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.roundRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 6px;
+}
+
+.roundInfo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.roundName {
+  font-size: 15px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.roundStatus {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  background: var(--surface2);
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.live {
+  background: rgba(22,163,74,0.12);
+  color: var(--green);
+}
+
+.roundPts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ptA { color: var(--teamA); }
+.ptB { color: var(--teamB); }
+.ptSep { color: var(--text-muted); font-weight: 400; }
+
+.matchCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 6px;
+  gap: 8px;
+}
+
+.matchTeams {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  flex: 1;
+}
+
+.matchVs {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.matchStatus {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--teamA);
+  background: rgba(78,42,132,0.08);
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+.matchArrow {
+  font-size: 20px;
+  color: var(--text-muted);
+}
+
+.joinBtn {
+  background: var(--teamA);
+  color: white;
+  border-radius: var(--radius);
+  padding: 16px;
+  width: 100%;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(78,42,132,0.25);
+}
+
+.empty {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.bottomPad { height: 20px; }

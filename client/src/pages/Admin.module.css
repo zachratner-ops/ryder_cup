@@ -1,0 +1,107 @@
+.page {
+  padding: 24px 16px 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-height: 100dvh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.loginForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 300px;
+}
+
+.pinInput {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  font-size: 24px;
+  text-align: center;
+  letter-spacing: 8px;
+  width: 100%;
+  color: var(--text);
+}
+
+.pinInput:focus {
+  outline: none;
+  border-color: var(--teamA);
+}
+
+.loginBtn {
+  background: var(--teamA);
+  color: white;
+  border-radius: var(--radius);
+  padding: 16px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.error {
+  color: var(--teamA);
+  font-size: 14px;
+  text-align: center;
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.divider {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  position: relative;
+  margin: 4px 0;
+}
+
+.seedBtn {
+  width: 100%;
+  max-width: 300px;
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 1.5px dashed var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.seedBtn:active {
+  background: var(--surface2);
+}
+
+.logout {
+  font-size: 14px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 14px;
+}
+
+.resetBtn {
+  margin-top: 32px;
+  width: 100%;
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 1px solid #fca5a5;
+  background: #fff5f5;
+  color: #dc2626;
+  font-size: 15px;
+  font-weight: 600;
+}

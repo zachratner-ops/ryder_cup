@@ -1,0 +1,9 @@
+{
+  "name": "ryder-cup",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd client && npm install && npm run build",
+    "install": "cd server && npm install",
+    "start": "node server/index.js"
+  }
+}

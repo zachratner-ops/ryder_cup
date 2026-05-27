@@ -1,0 +1,303 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.steps {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.steps::-webkit-scrollbar { display: none; }
+
+.stepBtn {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.stepActive {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.section label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 4px;
+}
+
+.section input,
+.section select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 16px;
+  color: var(--text);
+  width: 100%;
+}
+
+.section input:focus,
+.section select:focus {
+  outline: none;
+  border-color: var(--teamA);
+}
+
+.next,
+.submitBtn {
+  background: var(--accent);
+  color: white;
+  border-radius: var(--radius);
+  padding: 16px;
+  font-size: 17px;
+  font-weight: 700;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.submitBtn:disabled { opacity: 0.4; }
+
+.closeBtn {
+  background: var(--teamA);
+  color: white;
+  border-radius: var(--radius);
+  padding: 16px;
+  font-size: 17px;
+  font-weight: 700;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.closeBtn:disabled { opacity: 0.4; }
+
+.teamGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.teamHeader {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 0;
+}
+
+.playerRow {
+  display: flex;
+  gap: 8px;
+}
+
+.nameInput { flex: 1; }
+
+.hcpInput {
+  width: 70px !important;
+  text-align: center;
+}
+
+.holeGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.holeGridHeader {
+  display: grid;
+  grid-template-columns: 40px 80px 80px;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0 4px;
+}
+
+.holeRow {
+  display: grid;
+  grid-template-columns: 40px 80px 80px;
+  gap: 8px;
+  align-items: center;
+}
+
+.holeRow select,
+.holeRow input {
+  padding: 8px !important;
+  font-size: 15px !important;
+  text-align: center;
+}
+
+.holeNum {
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.roundRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.roundRow select { flex: 1; }
+
+.roundNum {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  min-width: 60px;
+}
+
+.ptsInput {
+  width: 60px !important;
+  text-align: center;
+}
+
+.ptsLabel {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.removeRound {
+  color: var(--teamA);
+  font-size: 18px;
+  padding: 4px 8px;
+}
+
+.addRound {
+  color: var(--accent);
+  font-size: 15px;
+  text-align: left;
+  padding: 4px 0;
+}
+
+.roundMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.format {
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.status {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.live { color: var(--green); }
+
+.pinSmall {
+  width: 140px !important;
+  text-align: center;
+  letter-spacing: 4px;
+  font-size: 20px !important;
+}
+
+.pairingsHeader {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  margin-top: 8px;
+}
+
+.pairingCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pairingRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pairingTeam {
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 50px;
+}
+
+.playerSelect {
+  flex: 1;
+  border-radius: var(--radius-sm);
+  height: auto !important;
+  padding: 6px !important;
+  font-size: 15px !important;
+}
+
+.activeMatch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.vs {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.complete {
+  color: var(--green);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  padding: 20px;
+}
+
+.msg {
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--green);
+  padding: 8px;
+}
+
+.success {
+  color: var(--green);
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  padding: 40px 20px;
+}
