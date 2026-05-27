@@ -403,6 +403,17 @@
   justify-content: center;
 }
 
+/* Running match status column (replaces winner icon in match-play scorecard) */
+.scStatus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.2;
+}
+
 .halfMark {
   font-weight: 700;
   color: var(--text-muted);

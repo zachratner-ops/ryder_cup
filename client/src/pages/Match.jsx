@@ -14,12 +14,14 @@ function computeMatchStatus(holeResults, teamAIds, teamBIds) {
     holesPlayed++;
     if (hole.holeWinner === 'teamA') diff++;
     else if (hole.holeWinner === 'teamB') diff--;
+    // Detect match decided: leading margin exceeds holes remaining
+    const margin = Math.abs(diff);
+    const remaining = 18 - holesPlayed;
+    if (margin > remaining) return `${margin}&${remaining}`;
   }
   if (holesPlayed === 0) return 'All Square';
-  const remaining = 18 - holesPlayed;
   if (diff === 0) return `All Square thru ${holesPlayed}`;
   const margin = Math.abs(diff);
-  if (margin > remaining) return `${margin}UP (closed)`;
   return `${margin}UP thru ${holesPlayed}`;
 }
 
@@ -118,6 +120,34 @@ export default function Match({ playerId, isAdmin }) {
 
   // Yellow ball helpers
   const isYellowBall = match.format === 'yellowball';
+
+  // Per-hole running match status for the non-YB scorecard column
+  const scorecardStatus = (() => {
+    if (isYellowBall) return {};
+    const result = {};
+    let diff = 0, decided = false, decidedText = '', decidedTeam = null;
+    for (let h = 1; h <= 18; h++) {
+      const hd = holeData[h];
+      if (!hd?.holeWinner) break;
+      if (decided) { result[h] = { text: decidedText, team: decidedTeam }; continue; }
+      if (hd.holeWinner === 'teamA') diff++;
+      else if (hd.holeWinner === 'teamB') diff--;
+      const remaining = 18 - h;
+      const margin = Math.abs(diff);
+      const team = diff > 0 ? 'teamA' : diff < 0 ? 'teamB' : null;
+      if (diff === 0) {
+        result[h] = { text: 'AS', team: null };
+      } else if (margin > remaining) {
+        decidedText = `${margin}&${remaining}`;
+        decidedTeam = team;
+        decided = true;
+        result[h] = { text: decidedText, team };
+      } else {
+        result[h] = { text: `${margin} up`, team };
+      }
+    }
+    return result;
+  })();
   const carrierOrder = match.carrierOrder || round?.carrierOrder;
   function getCarrier(holeNum, team) {
     const order = carrierOrder?.[team];
@@ -565,7 +595,7 @@ export default function Match({ playerId, isAdmin }) {
           <div className={styles.scorecardGrid}>
             <div
               className={`${styles.scRow} ${styles.scHeader}`}
-              style={{ gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 26px` }}
+              style={{ gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 48px` }}
             >
               <span />
               {allPlayerIds.map((id) => {
@@ -586,7 +616,6 @@ export default function Match({ playerId, isAdmin }) {
 
             {Array.from({ length: 18 }, (_, i) => i + 1).map((h) => {
               const hd = holeData[h] || {};
-              const winner = hd.holeWinner;
               const holePar = courseHoles[h]?.par;
 
               const carriers = new Set();
@@ -598,8 +627,14 @@ export default function Match({ playerId, isAdmin }) {
                 nets.filter((x) => x.net === best).forEach((x) => carriers.add(x.id));
               });
 
-              const gridStyle = { gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 26px` };
+              const gridStyle = { gridTemplateColumns: `28px repeat(${allPlayerIds.length}, 1fr) 48px` };
               const isLastPlayed = !!hd.holeWinner && !holeData[h + 1]?.holeWinner;
+
+              // Running match status for this hole's rightmost column
+              const st = scorecardStatus[h];
+              const stColor = st?.team === 'teamA' ? 'var(--teamA)'
+                : st?.team === 'teamB' ? 'var(--teamB)'
+                : 'var(--text-muted)';
 
               const holeRow = (
                 <div key={`hole-${h}`} style={gridStyle} className={`${styles.scRow} ${h === currentHole ? styles.scCurrent : ''}`}>
@@ -629,8 +664,8 @@ export default function Match({ playerId, isAdmin }) {
                       </span>
                     );
                   })}
-                  <span className={styles.scWinner}>
-                    {winner === 'half' ? <span className={styles.halfMark}>½</span> : winner ? <TeamLogo teamId={winner} size={18} /> : null}
+                  <span className={styles.scStatus} style={st ? { color: stColor } : {}}>
+                    {st?.text ?? ''}
                   </span>
                 </div>
               );
