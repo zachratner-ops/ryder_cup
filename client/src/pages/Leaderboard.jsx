@@ -18,6 +18,20 @@ function computeMatchInfo(matchHoles) {
   return { diff, holesPlayed };
 }
 
+// Yellow ball: cumulative stroke differential (lower = better)
+function computeYBInfo(matchHoles) {
+  let cumA = 0, cumB = 0, holesPlayed = 0;
+  for (let h = 1; h <= 18; h++) {
+    const hole = matchHoles?.[h];
+    if (hole?.ybNetA == null || hole?.ybNetB == null) break;
+    cumA += hole.ybNetA;
+    cumB += hole.ybNetB;
+    holesPlayed++;
+  }
+  // diff < 0 → teamA leads; diff > 0 → teamB leads
+  return { diff: cumA - cumB, holesPlayed };
+}
+
 const formatLabel = (f) => {
   const labels = { fourball: 'Four-ball', foursomes: 'Foursomes', singles: 'Singles', yellowball: 'Yellow Ball' };
   return labels[f] || f;
@@ -63,11 +77,17 @@ export default function Leaderboard({ playerId }) {
   let liveBPoints = 0;
   Object.entries(matches).forEach(([matchId, match]) => {
     if (match.status !== 'active') return;
-    const { diff, holesPlayed } = computeMatchInfo(allHoles[matchId] || {});
     const pts = rounds[match.roundId]?.pointsValue || 1;
-    if (diff > 0) liveAPoints += pts;
-    else if (diff < 0) liveBPoints += pts;
-    else if (holesPlayed > 0) { liveAPoints += pts / 2; liveBPoints += pts / 2; } // all square = half each
+    const isYB = match.format === 'yellowball';
+    // YB: negative diff = teamA leads (fewer strokes); match play: positive diff = teamA leads
+    const { diff, holesPlayed } = isYB
+      ? computeYBInfo(allHoles[matchId] || {})
+      : computeMatchInfo(allHoles[matchId] || {});
+    const aLeads = isYB ? diff < 0 : diff > 0;
+    const bLeads = isYB ? diff > 0 : diff < 0;
+    if (aLeads) liveAPoints += pts;
+    else if (bLeads) liveBPoints += pts;
+    else if (holesPlayed > 0) { liveAPoints += pts / 2; liveBPoints += pts / 2; }
   });
 
   // Boundaries: A fills from left, B fills from right, live fills adjacent gaps
@@ -192,17 +212,38 @@ export default function Leaderboard({ playerId }) {
                 {/* Nested match cards */}
                 {expanded && roundMatches.map(([matchId, match]) => {
                   const matchHoles = allHoles[matchId] || {};
-                  const { diff, holesPlayed } = computeMatchInfo(matchHoles);
-                  const remaining = 18 - holesPlayed;
-                  const margin = Math.abs(diff);
+                  const isYB = match.format === 'yellowball';
 
-                  let leader = null;
-                  if (holesPlayed > 0 && diff !== 0) {
-                    leader = diff > 0 ? 'teamA' : 'teamB';
+                  // Compute who's leading and by how much
+                  let holesPlayed, leader, margin;
+                  if (isYB) {
+                    const info = computeYBInfo(matchHoles);
+                    holesPlayed = info.holesPlayed;
+                    leader = info.holesPlayed > 0 && info.diff !== 0
+                      ? (info.diff < 0 ? 'teamA' : 'teamB') : null;
+                    margin = Math.abs(info.diff);
+                  } else {
+                    const info = computeMatchInfo(matchHoles);
+                    holesPlayed = info.holesPlayed;
+                    leader = info.holesPlayed > 0 && info.diff !== 0
+                      ? (info.diff > 0 ? 'teamA' : 'teamB') : null;
+                    margin = Math.abs(info.diff);
                   }
 
-                  const teamANames = match.teamA?.playerIds?.map(id => players[id]?.name?.split(' ')[0] || id).join(' & ') || '—';
-                  const teamBNames = match.teamB?.playerIds?.map(id => players[id]?.name?.split(' ')[0] || id).join(' & ') || '—';
+                  const remaining = 18 - holesPlayed;
+
+                  // YB shows team names; match play shows player first names
+                  const displayA = isYB
+                    ? teamAName
+                    : match.teamA?.playerIds?.map(id => players[id]?.name?.split(' ')[0] || id).join(' & ') || '—';
+                  const displayB = isYB
+                    ? teamBName
+                    : match.teamB?.playerIds?.map(id => players[id]?.name?.split(' ')[0] || id).join(' & ') || '—';
+
+                  // Lead text: "Leads by N stroke(s)" for YB; "NUP" / "N&R" for match play
+                  const leadText = isYB
+                    ? `Leads by ${margin} stroke${margin !== 1 ? 's' : ''}`
+                    : margin > remaining ? `${margin}&${remaining}` : `${margin}UP`;
 
                   return (
                     <button
@@ -214,18 +255,18 @@ export default function Leaderboard({ playerId }) {
                         <div className={styles.mcSide}>
                           <div className={styles.mcTeamRow}>
                             <TeamLogo teamId="teamA" size={18} />
-                            <span className={styles.mcNameA}>{teamANames}</span>
+                            <span className={styles.mcNameA}>{displayA}</span>
                           </div>
                           {leader === 'teamA' && (
                             <span className={styles.mcUp} style={{ color: 'var(--teamA)', paddingLeft: 24 }}>
-                              {margin > remaining ? `${margin}&${remaining}` : `${margin}UP`}
+                              {leadText}
                             </span>
                           )}
                         </div>
 
                         <div className={styles.mcCenter}>
                           {leader === null && holesPlayed > 0 && (
-                            <span className={styles.mcAllSquare}>All Square</span>
+                            <span className={styles.mcAllSquare}>{isYB ? 'Tied' : 'All Square'}</span>
                           )}
                           <span className={styles.mcThruText}>
                             {holesPlayed > 0 ? `Thru ${holesPlayed}` : match.status === 'active' ? 'Starting' : '—'}
@@ -234,12 +275,12 @@ export default function Leaderboard({ playerId }) {
 
                         <div className={`${styles.mcSide} ${styles.mcSideRight}`}>
                           <div className={`${styles.mcTeamRow} ${styles.mcTeamRowRight}`}>
-                            <span className={styles.mcNameB}>{teamBNames}</span>
+                            <span className={styles.mcNameB}>{displayB}</span>
                             <TeamLogo teamId="teamB" size={18} />
                           </div>
                           {leader === 'teamB' && (
                             <span className={styles.mcUp} style={{ color: 'var(--teamB)', paddingRight: 24 }}>
-                              {margin > remaining ? `${margin}&${remaining}` : `${margin}UP`}
+                              {leadText}
                             </span>
                           )}
                         </div>
