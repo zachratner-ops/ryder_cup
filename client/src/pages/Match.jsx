@@ -339,8 +339,7 @@ export default function Match({ playerId, isAdmin }) {
           const runDiff = runA - runB;
           const diffLabel = !holePlayed ? ''
             : runDiff === 0 ? 'E'
-            : runDiff < 0 ? `−${Math.abs(runDiff)}`
-            : `+${Math.abs(runDiff)}`;
+            : `${Math.abs(runDiff)} up`;
           const diffColor = !holePlayed ? 'var(--text-muted)'
             : runDiff < 0 ? 'var(--teamA)'
             : runDiff > 0 ? 'var(--teamB)'
@@ -383,7 +382,7 @@ export default function Match({ playerId, isAdmin }) {
             </span>
           ))}
           <span style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: totalDiff < 0 ? 'var(--teamA)' : totalDiff > 0 ? 'var(--teamB)' : 'var(--text-muted)' }}>
-            {cumA === 0 && cumB === 0 ? '' : totalDiff === 0 ? 'E' : totalDiff < 0 ? `−${Math.abs(totalDiff)}` : `+${Math.abs(totalDiff)}`}
+            {cumA === 0 && cumB === 0 ? '' : totalDiff === 0 ? 'E' : `${Math.abs(totalDiff)} up`}
           </span>
         </div>
       </div>
