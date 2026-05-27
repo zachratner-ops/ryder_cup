@@ -71,10 +71,12 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
     setPairings((p) => [...p, { matchId: `match_${Date.now()}`, teamA: { playerIds: [] }, teamB: { playerIds: [] } }]);
   }
 
-  function updatePairing(i, team, playerIds) {
+  function updatePairingSlot(pairingIdx, team, slotIdx, playerId) {
     setPairings((prev) => {
       const next = [...prev];
-      next[i] = { ...next[i], [team]: { playerIds } };
+      const ids = [...(next[pairingIdx][team].playerIds || [])];
+      ids[slotIdx] = playerId;
+      next[pairingIdx] = { ...next[pairingIdx], [team]: { playerIds: ids } };
       return next;
     });
   }
@@ -100,7 +102,13 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
   }
 
   async function startRound() {
-    await call(`/api/rounds/${selectedRound}/start`, { matches: pairings }, 'Round started!');
+    // Strip any empty slot strings before sending
+    const cleanedPairings = pairings.map(p => ({
+      ...p,
+      teamA: { playerIds: p.teamA.playerIds.filter(Boolean) },
+      teamB: { playerIds: p.teamB.playerIds.filter(Boolean) },
+    }));
+    await call(`/api/rounds/${selectedRound}/start`, { matches: cleanedPairings }, 'Round started!');
     setPairings([]);
   }
 
@@ -305,22 +313,43 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
               {round.status === 'setup' && round.format !== 'yellowball' && (
                 <>
                   <div className={styles.pairingsHeader}>Pairings</div>
-                  {pairings.map((p, i) => (
-                    <div key={i} className={styles.pairingCard}>
-                      <div className={styles.pairingRow}>
-                        <span className={styles.pairingTeam} style={{ color: 'var(--teamA)' }}>{tournament.teamA?.name}</span>
-                        <select multiple size={2} value={p.teamA.playerIds} onChange={(e) => updatePairing(i, 'teamA', Array.from(e.target.selectedOptions, (o) => o.value))} className={styles.playerSelect}>
-                          {teamAPlayers.map(([id, pl]) => <option key={id} value={id}>{pl.name}</option>)}
-                        </select>
+                  {(() => {
+                    const slotsPerTeam = round.format === 'singles' ? 1 : 2;
+                    // Collect every selected player ID so we can hide them from other slots
+                    const usedA = new Set(pairings.flatMap(p => p.teamA.playerIds).filter(Boolean));
+                    const usedB = new Set(pairings.flatMap(p => p.teamB.playerIds).filter(Boolean));
+
+                    return pairings.map((p, i) => (
+                      <div key={i} className={styles.pairingCard}>
+                        {[
+                          { team: 'teamA', label: tournament.teamA?.name, color: 'var(--teamA)', pool: teamAPlayers, used: usedA, slots: p.teamA.playerIds },
+                          { team: 'teamB', label: tournament.teamB?.name, color: 'var(--teamB)', pool: teamBPlayers, used: usedB, slots: p.teamB.playerIds },
+                        ].map(({ team, label, color, pool, used, slots }) => (
+                          <div key={team} className={styles.pairingRow}>
+                            <span className={styles.pairingTeam} style={{ color }}>{label}</span>
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {Array.from({ length: slotsPerTeam }, (_, slot) => {
+                                const currentVal = slots[slot] || '';
+                                return (
+                                  <select
+                                    key={slot}
+                                    value={currentVal}
+                                    onChange={e => updatePairingSlot(i, team, slot, e.target.value)}
+                                    className={styles.playerSelect}
+                                  >
+                                    <option value="">— pick player —</option>
+                                    {pool
+                                      .filter(([id]) => !used.has(id) || id === currentVal)
+                                      .map(([id, pl]) => <option key={id} value={id}>{pl.name}</option>)}
+                                  </select>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div className={styles.pairingRow}>
-                        <span className={styles.pairingTeam} style={{ color: 'var(--teamB)' }}>{tournament.teamB?.name}</span>
-                        <select multiple size={2} value={p.teamB.playerIds} onChange={(e) => updatePairing(i, 'teamB', Array.from(e.target.selectedOptions, (o) => o.value))} className={styles.playerSelect}>
-                          {teamBPlayers.map(([id, pl]) => <option key={id} value={id}>{pl.name}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                  ))}
+                    ));
+                  })()}
                   <button className={styles.addRound} onClick={addPairing}>+ Add pairing</button>
                   <button className={styles.submitBtn} onClick={startRound} disabled={busy || !pairings.length}>
                     {busy ? 'Starting…' : 'Start Round'}
