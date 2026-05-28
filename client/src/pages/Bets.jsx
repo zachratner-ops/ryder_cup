@@ -200,7 +200,14 @@ function CustomBetCard({ betId, bet, players, onSettle }) {
 
 // ── Create bet modal ─────────────────────────────────────────────────────────
 
-function CreateBetModal({ players, matches, playerId, onClose, onCreated }) {
+const FORMAT_LABEL = {
+  fourball: 'Four-Ball',
+  foursomes: 'Foursomes',
+  singles: 'Singles',
+  yellowball: 'Yellow Ball',
+};
+
+function CreateBetModal({ players, matches, rounds, playerId, onClose, onCreated }) {
   const [tab, setTab] = useState('nassau');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -227,7 +234,14 @@ function CreateBetModal({ players, matches, playerId, onClose, onCreated }) {
     setCustomPlayerIds(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
   }
 
-  const activeMatches = Object.entries(matches).filter(([, m]) => m.status === 'active' || m.status === 'complete');
+  // Show active/upcoming (not completed) matches
+  const activeMatches = Object.entries(matches)
+    .filter(([, m]) => m.status !== 'complete')
+    .sort(([, a], [, b]) => {
+      const rA = rounds[a.roundId]?.order ?? 99;
+      const rB = rounds[b.roundId]?.order ?? 99;
+      return rA - rB;
+    });
 
   const playersInMatch = useMemo(() => {
     if (!nassauMatchId || !matches[nassauMatchId]) return [];
@@ -348,9 +362,12 @@ function CreateBetModal({ players, matches, playerId, onClose, onCreated }) {
               >
                 <option value="">Select a match…</option>
                 {activeMatches.map(([mid, m]) => {
+                  const round = rounds[m.roundId];
+                  const roundNum = round?.order ?? '?';
+                  const fmt = FORMAT_LABEL[m.format] || m.format || 'Match';
                   const allIds = [...(m.teamA?.playerIds || []), ...(m.teamB?.playerIds || [])];
-                  const label = allIds.map(id => players[id]?.name?.split(' ')[0] || id).join(', ');
-                  return <option key={mid} value={mid}>{label}</option>;
+                  const playerNames = allIds.map(id => players[id]?.name?.split(' ')[0] || id).join(', ');
+                  return <option key={mid} value={mid}>Round {roundNum} · {fmt} — {playerNames}</option>;
                 })}
               </select>
             </div>
@@ -608,6 +625,7 @@ export default function Bets({ playerId }) {
   const [presses, setPresses] = useState({});
   const [players, setPlayers] = useState({});
   const [matches, setMatches] = useState({});
+  const [rounds, setRounds] = useState({});
   const [allHoles, setAllHoles] = useState({});
   const [showCreate, setShowCreate] = useState(false);
   const [settlingBet, setSettlingBet] = useState(null); // { betId, bet }
@@ -619,7 +637,8 @@ export default function Bets({ playerId }) {
     const u4 = onValue(ref(db, 'players'), (s) => setPlayers(s.val() || {}));
     const u5 = onValue(ref(db, 'matches'), (s) => setMatches(s.val() || {}));
     const u6 = onValue(ref(db, 'holes'), (s) => setAllHoles(s.val() || {}));
-    return () => { u1(); u2(); u3(); u4(); u5(); u6(); };
+    const u7 = onValue(ref(db, 'rounds'), (s) => setRounds(s.val() || {}));
+    return () => { u1(); u2(); u3(); u4(); u5(); u6(); u7(); };
   }, []);
 
   // Running balances across all bets
@@ -742,6 +761,7 @@ export default function Bets({ playerId }) {
         <CreateBetModal
           players={players}
           matches={matches}
+          rounds={rounds}
           playerId={playerId}
           onClose={() => setShowCreate(false)}
           onCreated={() => {}}

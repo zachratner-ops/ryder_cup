@@ -460,7 +460,7 @@
 .scoreDouble {
   border-radius: 2px;
   border-color: var(--text-muted);
-  outline: 2.5px solid var(--text-muted);
+  outline: 1.5px solid var(--text-muted);
   outline-offset: 3px;
 }
 
@@ -568,10 +568,12 @@
   display: flex;
   gap: 8px;
   margin: 12px 0 4px;
+  padding: 0 16px;
 }
 
 .matchTabBtn {
-  padding: 8px 22px;
+  flex: 1;
+  padding: 8px 0;
   border-radius: 20px;
   background: var(--surface2);
   border: 1.5px solid var(--border);
@@ -580,6 +582,7 @@
   color: var(--text-muted);
   cursor: pointer;
   white-space: nowrap;
+  text-align: center;
 }
 
 .matchTabActive {
@@ -592,7 +595,7 @@
 /* ── MatchBetsTab ─── */
 
 .betsTab {
-  padding-bottom: 20px;
+  padding: 0 16px 20px;
 }
 
 .betsTabEmpty {

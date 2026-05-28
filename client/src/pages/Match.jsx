@@ -48,6 +48,12 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
   // Nassau create form (pre-filled to this match)
   const [newOpponent, setNewOpponent] = useState('');
   const [newAmount, setNewAmount] = useState('');
+  const [newCompFront, setNewCompFront] = useState(true);
+  const [newCompBack, setNewCompBack] = useState(true);
+  const [newCompOverall, setNewCompOverall] = useState(true);
+  const [newCompCustom, setNewCompCustom] = useState(false);
+  const [newCustomStart, setNewCustomStart] = useState('');
+  const [newCustomEnd, setNewCustomEnd] = useState('');
 
   // Custom create form
   const [createTab, setCreateTab] = useState('nassau');
@@ -89,13 +95,10 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
     [nassauBets, matchId]
   );
 
-  // Custom bets where any player is in this match
+  // Custom bets explicitly created within this match
   const matchCustomBets = useMemo(() =>
-    Object.entries(customBets).filter(([, b]) => {
-      const pids = Array.isArray(b.players) ? b.players : [b.playerA, b.playerB].filter(Boolean);
-      return pids.some(pid => allPlayerIds.includes(pid));
-    }),
-    [customBets, allPlayerIds]
+    Object.entries(customBets).filter(([, b]) => b.matchId === matchId),
+    [customBets, matchId]
   );
 
   const betCount = matchNassauBets.length + matchCustomBets.length;
@@ -105,6 +108,20 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
     if (!myId && !isAdmin) { setCreateError('Select your player first.'); return; }
     if (!newOpponent || !newAmount) { setCreateError('Fill in all fields.'); return; }
     if (newOpponent === myId) { setCreateError('Pick a different opponent.'); return; }
+
+    const components = [];
+    if (newCompFront) components.push({ label: 'Front 9', startHole: 1, endHole: 9 });
+    if (newCompBack) components.push({ label: 'Back 9', startHole: 10, endHole: 18 });
+    if (newCompOverall) components.push({ label: 'Overall', startHole: 1, endHole: 18 });
+    if (newCompCustom) {
+      const s = parseInt(newCustomStart), e = parseInt(newCustomEnd);
+      if (!s || !e || s < 1 || e > 18 || s >= e) {
+        setCreateError('Custom range: enter valid holes (1–18, start < end).');
+        return;
+      }
+      components.push({ label: `Holes ${s}–${e}`, startHole: s, endHole: e });
+    }
+    if (components.length === 0) { setCreateError('Select at least one component.'); return; }
 
     setCreateLoading(true);
     setCreateError('');
@@ -117,6 +134,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
           playerA: myId || allPlayerIds[0],
           playerB: newOpponent,
           amount: parseFloat(newAmount),
+          components,
           createdBy: myId || 'admin',
         }),
       });
@@ -125,6 +143,8 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
       setShowCreate(false);
       setNewOpponent('');
       setNewAmount('');
+      setNewCompFront(true); setNewCompBack(true); setNewCompOverall(true);
+      setNewCompCustom(false); setNewCustomStart(''); setNewCustomEnd('');
     } catch (e) {
       setCreateError(e.message);
     } finally {
@@ -149,6 +169,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
         players: customPlayerIds,
         amount: parseFloat(customAmount),
         winners: null,
+        matchId,                          // tie this bet to the match it was created in
         createdBy: playerId || 'unknown',
         createdAt: Date.now(),
         status: 'open',
@@ -487,7 +508,48 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
                 </select>
               </div>
               <div>
-                <div className={styles.sectionLabel}>$ Per Component (front/back/overall)</div>
+                <div className={styles.sectionLabel}>Components</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {[
+                    { label: 'Front 9', val: newCompFront, set: setNewCompFront },
+                    { label: 'Back 9', val: newCompBack, set: setNewCompBack },
+                    { label: 'Overall', val: newCompOverall, set: setNewCompOverall },
+                    { label: 'Custom', val: newCompCustom, set: setNewCompCustom },
+                  ].map(({ label, val, set }) => (
+                    <button
+                      key={label}
+                      type="button"
+                      style={{
+                        padding: '7px 14px', borderRadius: 20,
+                        border: `1.5px solid ${val ? 'var(--accent)' : 'var(--border)'}`,
+                        background: val ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'var(--surface2)',
+                        color: val ? 'var(--accent)' : 'var(--text-muted)',
+                        fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                      }}
+                      onClick={() => set(v => !v)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {newCompCustom && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
+                    <input
+                      style={{ flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', fontSize: 14, color: 'var(--text)' }}
+                      type="number" min="1" max="17" placeholder="Start hole"
+                      value={newCustomStart} onChange={e => setNewCustomStart(e.target.value)}
+                    />
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 600, padding: '0 4px' }}>–</span>
+                    <input
+                      style={{ flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', fontSize: 14, color: 'var(--text)' }}
+                      type="number" min="2" max="18" placeholder="End hole"
+                      value={newCustomEnd} onChange={e => setNewCustomEnd(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+              <div>
+                <div className={styles.sectionLabel}>$ Per Component</div>
                 <input
                   style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '11px 14px', fontSize: 15, width: '100%', color: 'var(--text)', boxSizing: 'border-box' }}
                   type="number"
