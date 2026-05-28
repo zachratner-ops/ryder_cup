@@ -1,0 +1,23 @@
+{
+  "name": "Ryder Cup Weekend",
+  "short_name": "Ryder Cup",
+  "description": "Live scoring and leaderboard for your Ryder Cup golf weekend",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f0f13",
+  "theme_color": "#0f0f13",
+  "icons": [
+    {
+      "src": "/gb-logo.webp",
+      "sizes": "any",
+      "type": "image/webp",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/nw-logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

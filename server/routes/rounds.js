@@ -43,10 +43,22 @@ router.post('/:roundId/start', async (req, res) => {
       // Support both { playerIds: [] } and raw array formats
       const teamAIds = Array.isArray(match.teamA) ? match.teamA : (match.teamA?.playerIds || []);
       const teamBIds = Array.isArray(match.teamB) ? match.teamB : (match.teamB?.playerIds || []);
-      const allPlayerIds = [...teamAIds, ...teamBIds];
-      const matchPlayers = allPlayerIds.map((id) => ({ id, ...playersMap[id] }));
 
-      const strokeAllocation = computeStrokeAllocation(matchPlayers, courseHoles, round.format);
+      let strokeAllocation;
+      if (round.format === 'foursomes') {
+        // Foursomes: one allocation per pair keyed by 'teamA'/'teamB', handicap = combined / 2
+        const combinedHcpA = teamAIds.reduce((s, id) => s + (playersMap[id]?.handicap || 0), 0) / 2;
+        const combinedHcpB = teamBIds.reduce((s, id) => s + (playersMap[id]?.handicap || 0), 0) / 2;
+        strokeAllocation = computeStrokeAllocation(
+          [{ id: 'teamA', combinedHcp: Math.round(combinedHcpA) }, { id: 'teamB', combinedHcp: Math.round(combinedHcpB) }],
+          courseHoles,
+          'foursomes'
+        );
+      } else {
+        const allPlayerIds = [...teamAIds, ...teamBIds];
+        const matchPlayers = allPlayerIds.map((id) => ({ id, ...playersMap[id] }));
+        strokeAllocation = computeStrokeAllocation(matchPlayers, courseHoles, round.format);
+      }
 
       updates[`matches/${match.matchId}`] = {
         roundId,

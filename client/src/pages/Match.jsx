@@ -68,11 +68,15 @@ export default function Match({ playerId, isAdmin }) {
     initialJumped.current = true;
   }, [holeData]);
 
-  // Admin: initialise entryForId to first player in match
+  // Admin: initialise entryForId to first player (or 'teamA' for foursomes)
   useEffect(() => {
     if (!isAdmin || entryForId || !match) return;
-    const first = match.teamA?.playerIds?.[0] || match.teamB?.playerIds?.[0];
-    if (first) setEntryForId(first);
+    if (match.format === 'foursomes') {
+      setEntryForId('teamA');
+    } else {
+      const first = match.teamA?.playerIds?.[0] || match.teamB?.playerIds?.[0];
+      if (first) setEntryForId(first);
+    }
   }, [isAdmin, match, entryForId]);
 
   // Default gross to par when hole changes (non-admin path)
@@ -113,13 +117,30 @@ export default function Match({ playerId, isAdmin }) {
     : 'score'
   );
 
-  // The player whose score we're currently entering:
-  // • normal mode  → the logged-in player
-  // • admin mode   → whichever player admin has selected in the picker
-  const effectivePlayerId = isAdmin ? (entryForId || null) : playerId;
-
-  // Yellow ball helpers
+  // Format flags (must come first — used in variable derivations below)
   const isYellowBall = match.format === 'yellowball';
+  const isFoursomes = match.format === 'foursomes';
+
+  // For foursomes, derive team from playerId directly to avoid circular dependency
+  const playerTeam = match.teamA?.playerIds?.includes(playerId) ? 'teamA'
+    : match.teamB?.playerIds?.includes(playerId) ? 'teamB'
+    : 'teamA';
+
+  // The player/pair whose score we're currently entering:
+  // • normal mode  → the logged-in player (or playerTeam for foursomes)
+  // • admin mode   → whichever player/pair admin has selected
+  // For foursomes, effectivePlayerId is 'teamA' or 'teamB' (pair key, not a player ID)
+  const effectivePlayerId = isFoursomes
+    ? (isAdmin ? (entryForId || 'teamA') : playerTeam)
+    : (isAdmin ? (entryForId || null) : playerId);
+
+  // myTeam: for foursomes effectivePlayerId is already 'teamA'/'teamB';
+  // for other formats derive from which team holds the effectivePlayerId
+  const myTeam = isFoursomes
+    ? effectivePlayerId
+    : (effectivePlayerId && match.teamA?.playerIds?.includes(effectivePlayerId) ? 'teamA'
+      : effectivePlayerId && match.teamB?.playerIds?.includes(effectivePlayerId) ? 'teamB'
+      : 'teamA');
 
   // Per-hole running match status for the non-YB scorecard column
   const scorecardStatus = (() => {
@@ -156,10 +177,6 @@ export default function Match({ playerId, isAdmin }) {
   }
   const ybCarrierA = isYellowBall ? getCarrier(currentHole, 'teamA') : null;
   const ybCarrierB = isYellowBall ? getCarrier(currentHole, 'teamB') : null;
-  // myTeam based on whoever we're entering for (so YB carrier banner is accurate)
-  const myTeam = effectivePlayerId && match.teamA?.playerIds?.includes(effectivePlayerId) ? 'teamA'
-    : effectivePlayerId && match.teamB?.playerIds?.includes(effectivePlayerId) ? 'teamB'
-    : 'teamA';
   const myYBCarrier = isYellowBall && effectivePlayerId
     ? getCarrier(currentHole, myTeam) === effectivePlayerId
     : false;
@@ -182,10 +199,47 @@ export default function Match({ playerId, isAdmin }) {
   const holeComplete = !!holeData[currentHole]?.holeWinner;
   const waitingOn = (() => {
     if (!iSubmitted || holeComplete) return [];
+    if (isFoursomes) {
+      const opponentPair = myTeam === 'teamA' ? 'teamB' : 'teamA';
+      return holeData[currentHole]?.[opponentPair]?.gross ? [] : ['__pair__'];
+    }
     if (isYellowBall) {
       return [ybCarrierA, ybCarrierB].filter(id => id && id !== effectivePlayerId && !holeData[currentHole]?.[id]?.gross);
     }
     return allPlayerIds.filter(id => id !== effectivePlayerId && !holeData[currentHole]?.[id]?.gross);
+  })();
+
+  // Compute match result info when match is decided or complete
+  const resultInfo = (() => {
+    if (isYellowBall) {
+      let cumA = 0, cumB = 0, holesPlayed = 0;
+      for (let h = 1; h <= 18; h++) {
+        if (holeData[h]?.ybNetA == null) break;
+        cumA += holeData[h].ybNetA; cumB += holeData[h].ybNetB; holesPlayed++;
+      }
+      if (holesPlayed < 18 && match.status !== 'complete') return null;
+      if (holesPlayed === 0) return null;
+      const diff = cumA - cumB;
+      const winner = diff < 0 ? 'teamA' : diff > 0 ? 'teamB' : null;
+      return { winner, text: diff === 0 ? 'Tied — Halved' : `by ${Math.abs(diff)} stroke${Math.abs(diff) !== 1 ? 's' : ''}` };
+    }
+    let diff = 0, holesPlayed = 0, decided = null;
+    for (let h = 1; h <= 18; h++) {
+      const hd = holeData[h];
+      if (!hd?.holeWinner) break;
+      holesPlayed++;
+      if (hd.holeWinner === 'teamA') diff++;
+      else if (hd.holeWinner === 'teamB') diff--;
+      const margin = Math.abs(diff), remaining = 18 - holesPlayed;
+      if (!decided && (margin > remaining || holesPlayed === 18)) {
+        decided = { margin, remaining, diff };
+      }
+    }
+    if (!decided) return null;
+    const { margin, remaining, diff: fd } = decided;
+    const winner = fd > 0 ? 'teamA' : fd < 0 ? 'teamB' : null;
+    const text = fd === 0 ? 'All Square — Halved' : (remaining === 0 ? `${margin} UP` : `${margin}&${remaining}`);
+    return { winner, text };
   })();
 
   async function submitHole() {
@@ -218,6 +272,16 @@ export default function Match({ playerId, isAdmin }) {
     const teamAIds = match.teamA?.playerIds || [];
     const teamBIds = match.teamB?.playerIds || [];
     const holeRef = ref(db, `holes/${matchId}/${holeNum}`);
+
+    if (isFoursomes) {
+      const scoreA = scores.teamA;
+      const scoreB = scores.teamB;
+      if (scoreA?.net == null || scoreB?.net == null) return;
+      const winner = scoreA.net < scoreB.net ? 'teamA' : scoreA.net > scoreB.net ? 'teamB' : 'half';
+      const status = computeMatchStatus({ ...holeData, [holeNum]: { holeWinner: winner } }, [], []);
+      await update(holeRef, { holeWinner: winner, matchStatus: status });
+      return;
+    }
 
     if (isYellowBall) {
       const carrierAId = getCarrier(holeNum, 'teamA');
@@ -419,6 +483,97 @@ export default function Match({ playerId, isAdmin }) {
     );
   }
 
+  function renderFoursomesScorecard() {
+    const gridStyle = { gridTemplateColumns: '28px 1fr 1fr 26px 48px' };
+    const teamAIds = match.teamA?.playerIds || [];
+    const teamBIds = match.teamB?.playerIds || [];
+    const pairNameA = teamAIds.map(id => players[id]?.name?.split(' ')[0]).join(' & ');
+    const pairNameB = teamBIds.map(id => players[id]?.name?.split(' ')[0]).join(' & ');
+    const allocA = match.strokeAllocation?.teamA?.holes || [];
+    const allocB = match.strokeAllocation?.teamB?.holes || [];
+
+    function pairScorePill(score, alloc, h) {
+      const holePar = courseHoles[h]?.par;
+      const scoreDiff = (score?.gross && holePar) ? score.gross - holePar : null;
+      const shapeClass = scoreDiff === null ? ''
+        : scoreDiff <= -2 ? styles.scoreEagle
+        : scoreDiff === -1 ? styles.scoreBirdie
+        : scoreDiff === 1 ? styles.scoreBogey
+        : scoreDiff >= 2 ? styles.scoreDouble : '';
+      return (
+        <span className={styles.scScore}>
+          <span className={styles.dotSlot} />
+          <span className={`${styles.scorePill} ${shapeClass}`}>{score?.gross ?? '—'}</span>
+          <span className={styles.dotSlot}>
+            {alloc.includes(h) && <span className={styles.strokeMark} />}
+          </span>
+        </span>
+      );
+    }
+
+    const toParForPair = (pairKey, alloc) => {
+      let sum = 0, played = 0;
+      for (let hh = 1; hh <= 18; hh++) {
+        const s = holeData[hh]?.[pairKey];
+        const par = courseHoles[hh]?.par;
+        if (s?.gross && par) { sum += s.gross - par; played++; }
+      }
+      return played === 0 ? '—' : sum === 0 ? 'E' : sum > 0 ? `+${sum}` : `${sum}`;
+    };
+
+    return (
+      <div className={styles.scorecardGrid}>
+        <div className={`${styles.scRow} ${styles.scHeader}`} style={gridStyle}>
+          <span />
+          <span style={{ textAlign: 'center', color: 'var(--teamA)', fontWeight: 700, fontSize: '13px' }}>{pairNameA}</span>
+          <span style={{ textAlign: 'center', color: 'var(--teamB)', fontWeight: 700, fontSize: '13px' }}>{pairNameB}</span>
+          <span /><span />
+        </div>
+
+        {Array.from({ length: 18 }, (_, i) => i + 1).map(h => {
+          const hd = holeData[h] || {};
+          const winner = hd.holeWinner;
+          const st = scorecardStatus[h];
+          const stColor = st?.team === 'teamA' ? 'var(--teamA)' : st?.team === 'teamB' ? 'var(--teamB)' : 'var(--text-muted)';
+          const isLastPlayed = !!hd.holeWinner && !holeData[h + 1]?.holeWinner;
+
+          const holeRow = (
+            <div key={`hole-${h}`} style={gridStyle} className={`${styles.scRow} ${h === currentHole ? styles.scCurrent : ''}`}>
+              <span className={styles.scHole}>{h}</span>
+              {pairScorePill(hd.teamA, allocA, h)}
+              {pairScorePill(hd.teamB, allocB, h)}
+              <span className={styles.scWinner}>
+                {winner === 'half' ? <span className={styles.halfMark}>½</span> : winner ? <TeamLogo teamId={winner} size={18} /> : null}
+              </span>
+              <span className={styles.scStatus} style={st ? { color: stColor } : {}}>{st?.text ?? ''}</span>
+            </div>
+          );
+
+          if (!isLastPlayed) return holeRow;
+
+          const toParA = toParForPair('teamA', allocA);
+          const toParB = toParForPair('teamB', allocB);
+          const colorFor = (str) => str.startsWith('-') ? 'var(--green)' : str === 'E' ? 'var(--text-muted)' : '#c0392b';
+
+          return [
+            holeRow,
+            <div key={`topar-${h}`} style={gridStyle} className={`${styles.scRow} ${styles.scTotalRow}`}>
+              <span className={styles.scHole} style={{ fontSize: 9, color: 'var(--text-muted)' }}>vs par</span>
+              {[['teamA', toParA], ['teamB', toParB]].map(([key, str]) => (
+                <span key={key} className={styles.scScore}>
+                  <span className={styles.dotSlot} />
+                  <span className={styles.scorePill} style={{ color: colorFor(str), fontWeight: 700 }}>{str}</span>
+                  <span className={styles.dotSlot} />
+                </span>
+              ))}
+              <span /><span />
+            </div>,
+          ];
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className={styles.page}>
       {/* Header */}
@@ -465,8 +620,22 @@ export default function Match({ playerId, isAdmin }) {
       {/* Score entry */}
       {isMyMatch && !roundComplete && (
         <div className={styles.entryCard}>
-          {/* Admin: player picker */}
-          {isAdmin ? (
+          {/* Admin: player/pair picker; or player label for non-admin */}
+          {isAdmin && isFoursomes ? (
+            <div className={styles.field}>
+              <label style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Entering for
+              </label>
+              <select
+                value={entryForId || 'teamA'}
+                onChange={e => setEntryForId(e.target.value)}
+                style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', fontSize: '16px', fontWeight: 600, color: 'var(--text)' }}
+              >
+                <option value="teamA">{tournament?.teamA?.name || 'Team A'}: {match.teamA?.playerIds?.map(id => players[id]?.name?.split(' ')[0]).join(' & ')}</option>
+                <option value="teamB">{tournament?.teamB?.name || 'Team B'}: {match.teamB?.playerIds?.map(id => players[id]?.name?.split(' ')[0]).join(' & ')}</option>
+              </select>
+            </div>
+          ) : isAdmin ? (
             <div className={styles.field}>
               <label style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 Entering for
@@ -485,6 +654,10 @@ export default function Match({ playerId, isAdmin }) {
                   );
                 })}
               </select>
+            </div>
+          ) : isFoursomes ? (
+            <div className={styles.entryLabel}>
+              Pair score — {match[myTeam]?.playerIds?.map(id => players[id]?.name?.split(' ')[0]).join(' & ')}
             </div>
           ) : (
             <div className={styles.entryLabel}>Your score — {players[playerId]?.name}</div>
@@ -546,15 +719,39 @@ export default function Match({ playerId, isAdmin }) {
               onClick={submitHole}
               disabled={!gross || entry.putts === '' || (isAdmin && !effectivePlayerId)}
             >
-              Save{isAdmin ? ` ${players[effectivePlayerId]?.name?.split(' ')[0] ?? ''}'s` : ''} Hole {currentHole}
+              {isFoursomes
+                ? `Save Pair Score — Hole ${currentHole}`
+                : `Save${isAdmin ? ` ${players[effectivePlayerId]?.name?.split(' ')[0] ?? ''}'s` : ''} Hole ${currentHole}`}
             </button>
           )}
 
           {waitingOn.length > 0 && (
             <div className={styles.waitingMsg}>
-              Waiting on {waitingOn.map(id => players[id]?.name?.split(' ')[0]).join(', ')}…
+              Waiting on {waitingOn.map(id => {
+                if (id === '__pair__') {
+                  const opp = myTeam === 'teamA' ? 'teamB' : 'teamA';
+                  return match[opp]?.playerIds?.map(pid => players[pid]?.name?.split(' ')[0]).join(' & ');
+                }
+                return players[id]?.name?.split(' ')[0];
+              }).join(', ')}…
             </div>
           )}
+        </div>
+      )}
+
+      {/* Match result banner — shown when match is decided or round complete */}
+      {resultInfo && (
+        <div className={styles.resultBanner}>
+          {resultInfo.winner ? (
+            <>
+              <span style={{ color: `var(--${resultInfo.winner})` }}>
+                {isFoursomes || isYellowBall
+                  ? tournament?.[resultInfo.winner]?.name
+                  : match[resultInfo.winner]?.playerIds?.map(id => players[id]?.name?.split(' ')[0]).join(' & ')}
+              </span>
+              {' win — '}{resultInfo.text}
+            </>
+          ) : resultInfo.text}
         </div>
       )}
 
@@ -562,7 +759,7 @@ export default function Match({ playerId, isAdmin }) {
       <div className={styles.scorecard}>
         <div className={styles.sectionLabel}>Scorecard</div>
 
-        {isYellowBall ? (
+        {isFoursomes ? renderFoursomesScorecard() : isYellowBall ? (
           <>
             <div className={styles.ybTabs}>
               <button
