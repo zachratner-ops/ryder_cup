@@ -190,6 +190,14 @@ export default function Match({ playerId, isAdmin }) {
     ? (gross > 0 ? gross : null)
     : gross > 0 ? gross - (receiveStroke ? 1 : 0) : null;
 
+  const netVsPar = net != null && hole.par ? net - hole.par : null;
+  const stepperAnnotation = netVsPar == null ? ''
+    : netVsPar <= -2 ? styles.scoreEagle
+    : netVsPar === -1 ? styles.scoreBirdie
+    : netVsPar === 1 ? styles.scoreBogey
+    : netVsPar >= 2 ? styles.scoreDouble
+    : '';
+
   // Admin can always enter scores; regular players only when in the match
   const isMyMatch = isAdmin ? !!effectivePlayerId : allPlayerIds.includes(playerId);
   const roundComplete = match.status === 'complete';
@@ -243,14 +251,14 @@ export default function Match({ playerId, isAdmin }) {
   })();
 
   async function submitHole() {
-    if (!gross || entry.putts === '' || !effectivePlayerId) return;
+    if (!gross || !effectivePlayerId) return;
     const holeRef = ref(db, `holes/${matchId}/${currentHole}/${effectivePlayerId}`);
     await set(holeRef, {
       gross,
       net,
       fairwayHit: isPar3 ? null : entry.fairwayHit,
       gir: entry.gir,
-      putts: parseInt(entry.putts),
+      putts: entry.putts !== '' ? parseInt(entry.putts) : null,
     });
 
     await computeAndWriteHoleWinner(currentHole);
@@ -671,44 +679,49 @@ export default function Match({ playerId, isAdmin }) {
             </div>
           )}
 
-          <div className={styles.field}>
-            <label>Gross score</label>
-            <div className={styles.stepper}>
-              <button onClick={() => setEntry((e) => ({ ...e, gross: Math.max(1, (parseInt(e.gross) || 0) - 1) }))}>−</button>
-              <span className={styles.stepperVal}>{entry.gross || '—'}</span>
-              <button onClick={() => setEntry((e) => ({ ...e, gross: (parseInt(e.gross) || 0) + 1 }))}>+</button>
-            </div>
-          </div>
-
-          {net !== null && !isYellowBall && (
-            <div className={styles.netScore}>Net: {net}{receiveStroke ? ' (stroke)' : ''}</div>
-          )}
-
-          {!isPar3 && (
-            <div className={styles.field}>
-              <label>Fairway hit?</label>
-              <div className={styles.toggle}>
-                <button className={entry.fairwayHit === true ? styles.toggleOn : ''} onClick={() => setEntry((e) => ({ ...e, fairwayHit: true }))}>Yes</button>
-                <button className={entry.fairwayHit === false ? styles.toggleOff : ''} onClick={() => setEntry((e) => ({ ...e, fairwayHit: false }))}>No</button>
+          {/* Score widget: top = gross + annotation, bottom = net section */}
+          <div className={styles.grossRow}>
+            <div />
+            <div className={styles.scoreWidget}>
+              <div className={styles.stepper}>
+                <button onClick={() => setEntry((e) => ({ ...e, gross: Math.max(1, (parseInt(e.gross) || 0) - 1) }))}>−</button>
+                <span className={`${styles.grossNum} ${stepperAnnotation}`}>{entry.gross || '—'}</span>
+                <button onClick={() => setEntry((e) => ({ ...e, gross: (parseInt(e.gross) || 0) + 1 }))}>+</button>
               </div>
+              {net !== null && !isYellowBall && (
+                <div className={styles.netSection}>Net {net}{receiveStroke ? ' ●' : ''}</div>
+              )}
             </div>
-          )}
-
-          <div className={styles.field}>
-            <label>GIR?</label>
-            <div className={styles.toggle}>
-              <button className={entry.gir ? styles.toggleOn : ''} onClick={() => setEntry((e) => ({ ...e, gir: true }))}>Yes</button>
-              <button className={!entry.gir ? styles.toggleOff : ''} onClick={() => setEntry((e) => ({ ...e, gir: false }))}>No</button>
-            </div>
+            <div />
           </div>
 
-          <div className={styles.field}>
-            <label>Putts</label>
-            <div className={styles.stepper}>
-              <button onClick={() => setEntry((e) => ({ ...e, putts: Math.max(0, (parseInt(e.putts) || 0) - 1) }))}>−</button>
-              <span className={styles.stepperVal}>{entry.putts !== '' ? entry.putts : '—'}</span>
-              <button onClick={() => setEntry((e) => ({ ...e, putts: (parseInt(e.putts) || 0) + 1 }))}>+</button>
-            </div>
+          {/* FW / GIR + putts all on one row */}
+          <div className={styles.statsRow}>
+            {!isPar3 && (
+              <button
+                className={`${styles.statPill} ${entry.fairwayHit === true ? styles.statPillOn : ''}`}
+                onClick={() => setEntry((e) => ({ ...e, fairwayHit: e.fairwayHit === true ? false : true }))}
+              >
+                FW
+              </button>
+            )}
+            <button
+              className={`${styles.statPill} ${entry.gir ? styles.statPillOn : ''}`}
+              onClick={() => setEntry((e) => ({ ...e, gir: !e.gir }))}
+            >
+              GIR
+            </button>
+            <div className={styles.statDivider} />
+            <span className={styles.puttsLabel}>Putts</span>
+            {[1, 2, 3, 4].map((n) => (
+              <button
+                key={n}
+                className={`${styles.puttsPill} ${entry.putts === n ? styles.puttsPillOn : ''}`}
+                onClick={() => setEntry((e) => ({ ...e, putts: e.putts === n ? '' : n }))}
+              >
+                {n}
+              </button>
+            ))}
           </div>
 
           {justSaved ? (
@@ -717,7 +730,7 @@ export default function Match({ playerId, isAdmin }) {
             <button
               className={styles.submitBtn}
               onClick={submitHole}
-              disabled={!gross || entry.putts === '' || (isAdmin && !effectivePlayerId)}
+              disabled={!gross || (isAdmin && !effectivePlayerId)}
             >
               {isFoursomes
                 ? `Save Pair Score — Hole ${currentHole}`
