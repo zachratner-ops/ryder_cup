@@ -109,9 +109,16 @@
 
 .nassauHeader {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 10px;
+  gap: 8px;
+}
+
+.nassauHeaderLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .nassauPlayers {
@@ -129,10 +136,23 @@
   color: var(--text-muted);
 }
 
+.nassauMatchLink {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.nassauMatchLink:active {
+  opacity: 0.7;
+}
+
 .nassauMeta {
   font-size: 12px;
   color: var(--text-muted);
   font-weight: 500;
+  flex-shrink: 0;
+  padding-top: 2px;
 }
 
 .nassauSegments {

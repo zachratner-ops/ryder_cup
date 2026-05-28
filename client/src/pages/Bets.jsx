@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { ref, onValue, push, update } from 'firebase/database';
 import { db } from '../firebase';
 import {
@@ -119,7 +120,7 @@ function PressRows({ presses, nassauBet, nassauBetId, holeData, players, allPres
 
 // ── Nassau bet card ──────────────────────────────────────────────────────────
 
-function NassauBetCard({ betId, bet, holeData, players, allPresses, playerId }) {
+function NassauBetCard({ betId, bet, holeData, players, allPresses, playerId, matches, rounds }) {
   const componentStatuses = computeNassauStatus(holeData, bet);
   const nameA = firstName(players, bet.playerA);
   const nameB = firstName(players, bet.playerB);
@@ -127,6 +128,12 @@ function NassauBetCard({ betId, bet, holeData, players, allPresses, playerId }) 
   const isViewerA = playerId === bet.playerA;
   const isViewerB = playerId === bet.playerB;
   const isViewer = isViewerA || isViewerB;
+
+  // Match / round info for the header link
+  const match = matches && bet.matchId ? matches[bet.matchId] : null;
+  const round = match && rounds ? rounds[match.roundId] : null;
+  const roundNum = round?.order ?? '?';
+  const formatLabel = FORMAT_LABEL[match?.format] || match?.format || 'Match';
 
   // Collect top-level presses for this bet grouped by component label
   const pressesByLabel = {};
@@ -141,10 +148,17 @@ function NassauBetCard({ betId, bet, holeData, players, allPresses, playerId }) 
   return (
     <div className={styles.nassauCard}>
       <div className={styles.nassauHeader}>
-        <div className={styles.nassauPlayers}>
-          <span style={{ color: teamColor(players, bet.playerA) }}>{nameA}</span>
-          <span className={styles.vsText}>vs</span>
-          <span style={{ color: teamColor(players, bet.playerB) }}>{nameB}</span>
+        <div className={styles.nassauHeaderLeft}>
+          <div className={styles.nassauPlayers}>
+            <span style={{ color: teamColor(players, bet.playerA) }}>{nameA}</span>
+            <span className={styles.vsText}>vs</span>
+            <span style={{ color: teamColor(players, bet.playerB) }}>{nameB}</span>
+          </div>
+          {match && (
+            <Link to={`/match/${bet.matchId}`} className={styles.nassauMatchLink}>
+              Round {roundNum}: {formatLabel}
+            </Link>
+          )}
         </div>
         <div className={styles.nassauMeta}>${bet.amount}/comp</div>
       </div>
@@ -789,6 +803,8 @@ export default function Bets({ playerId }) {
               players={players}
               allPresses={presses}
               playerId={playerId}
+              matches={matches}
+              rounds={rounds}
             />
           ))
         )}
