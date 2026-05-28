@@ -48,20 +48,34 @@ function getBetWinnerIds(bet) {
 
 // ── Press rows (nested under a Nassau segment row, recursive for sub-presses) ──
 
-function PressRows({ presses, nassauBet, nassauBetId, holeData, players, allPresses }) {
+function PressRows({ presses, nassauBet, nassauBetId, holeData, players, allPresses, playerId }) {
   if (!presses.length) return null;
+  const isViewerA = playerId === nassauBet.playerA;
+  const isViewerB = playerId === nassauBet.playerB;
+  const isViewer = isViewerA || isViewerB;
+
   return (
     <div className={styles.pressRows}>
       {presses.map(([pressId, press]) => {
         const { startHole, endHole } = press;
         const status = computeSegmentStatus(holeData, nassauBet, startHole, endHole);
-        const payout = computePressPayout(status, nassauBet);
-        const aDelta = payout[nassauBet.playerA] || 0;
         const label = `Press ${startHole}–${endHole}`;
 
         const nameA = firstName(players, nassauBet.playerA);
         const nameB = firstName(players, nassauBet.playerB);
         const statusStr = formatSegmentStatus(status, nameA, nameB, startHole, endHole);
+
+        // Determine winner name and viewer-relative color
+        const winnerPlayerId =
+          status.winner === 'playerA' ? nassauBet.playerA :
+          status.winner === 'playerB' ? nassauBet.playerB : null;
+        const winnerName = winnerPlayerId ? firstName(players, winnerPlayerId) : null;
+        const viewerWins = isViewer && winnerPlayerId === playerId;
+        const viewerLoses = isViewer && winnerPlayerId && winnerPlayerId !== playerId;
+        const payoutColor = status.winner === 'half' ? 'var(--text-muted)'
+          : viewerWins ? 'var(--green)'
+          : viewerLoses ? '#dc2626'
+          : 'var(--green)';
 
         // Find any sub-presses whose parent is this press
         const childPresses = allPresses
@@ -76,11 +90,8 @@ function PressRows({ presses, nassauBet, nassauBetId, holeData, players, allPres
               <span className={styles.pressLabel}>{label}</span>
               <span className={styles.pressStatus}>{statusStr}</span>
               {status.winner !== 'incomplete' && (
-                <span
-                  className={styles.pressPayout}
-                  style={{ color: aDelta > 0 ? 'var(--green)' : aDelta < 0 ? '#dc2626' : 'var(--text-muted)' }}
-                >
-                  {status.winner === 'half' ? 'Halved' : `${fmtMoney(Math.abs(nassauBet.amount))}`}
+                <span className={styles.pressPayout} style={{ color: payoutColor }}>
+                  {status.winner === 'half' ? 'Halved' : `${winnerName} +$${nassauBet.amount}`}
                 </span>
               )}
             </div>
@@ -92,6 +103,7 @@ function PressRows({ presses, nassauBet, nassauBetId, holeData, players, allPres
                 holeData={holeData}
                 players={players}
                 allPresses={allPresses}
+                playerId={playerId}
               />
             )}
           </div>
@@ -103,12 +115,16 @@ function PressRows({ presses, nassauBet, nassauBetId, holeData, players, allPres
 
 // ── Nassau bet card ──────────────────────────────────────────────────────────
 
-function NassauBetCard({ betId, bet, holeData, players, allPresses }) {
+function NassauBetCard({ betId, bet, holeData, players, allPresses, playerId }) {
   const componentStatuses = computeNassauStatus(holeData, bet);
   const nameA = firstName(players, bet.playerA);
   const nameB = firstName(players, bet.playerB);
 
-  // Collect presses for this bet grouped by component label
+  const isViewerA = playerId === bet.playerA;
+  const isViewerB = playerId === bet.playerB;
+  const isViewer = isViewerA || isViewerB;
+
+  // Collect top-level presses for this bet grouped by component label
   const pressesByLabel = {};
   Object.entries(allPresses).forEach(([pid, p]) => {
     if (p.nassauBetId === betId && p.parentPressId == null) {
@@ -133,26 +149,38 @@ function NassauBetCard({ betId, bet, holeData, players, allPresses }) {
         {componentStatuses.map(({ label, startHole, endHole, status: s }) => {
           const statusStr = formatSegmentStatus(s, nameA, nameB, startHole, endHole);
           const decided = s.winner !== 'incomplete';
-          const aDelta = decided
-            ? (s.winner === 'playerA' ? bet.amount : s.winner === 'playerB' ? -bet.amount : 0)
-            : null;
 
+          // Winner identity
+          const winnerPlayerId =
+            s.winner === 'playerA' ? bet.playerA :
+            s.winner === 'playerB' ? bet.playerB : null;
+          const winnerName = winnerPlayerId ? firstName(players, winnerPlayerId) : null;
+
+          // Viewer-relative outcome
+          const viewerWins = isViewer && winnerPlayerId === playerId;
+          const viewerLoses = isViewer && winnerPlayerId && winnerPlayerId !== playerId;
+
+          // Block background: viewer-relative when viewer is in the bet, else playerA perspective
           const blockMod = decided
             ? (s.winner === 'half' ? styles.segBlockHalf
-              : aDelta > 0 ? styles.segBlockWon
-              : styles.segBlockLost)
+              : viewerWins ? styles.segBlockWon
+              : viewerLoses ? styles.segBlockLost
+              : s.winner === 'playerA' ? styles.segBlockWon : styles.segBlockLost)
             : s.holesPlayed > 0 ? styles.segBlockInProgress : '';
+
+          // Payout color: viewer-relative when in bet, else neutral green for winner
+          const payoutColor = s.winner === 'half' ? 'var(--text-muted)'
+            : viewerWins ? 'var(--green)'
+            : viewerLoses ? '#dc2626'
+            : 'var(--green)';
 
           return (
             <div key={label} className={`${styles.segBlock} ${blockMod}`}>
               <div className={styles.segBlockHeader}>
                 <span className={styles.segLabel}>{label}</span>
                 {decided && (
-                  <span
-                    className={styles.segPayout}
-                    style={{ color: aDelta > 0 ? 'var(--green)' : aDelta < 0 ? '#dc2626' : 'var(--text-muted)' }}
-                  >
-                    {s.winner === 'half' ? 'Halved' : (aDelta > 0 ? `+$${bet.amount}` : `-$${bet.amount}`)}
+                  <span className={styles.segPayout} style={{ color: payoutColor }}>
+                    {s.winner === 'half' ? 'Halved' : `${winnerName} +$${bet.amount}`}
                   </span>
                 )}
               </div>
@@ -171,6 +199,7 @@ function NassauBetCard({ betId, bet, holeData, players, allPresses }) {
                 holeData={holeData}
                 players={players}
                 allPresses={allPresses}
+                playerId={playerId}
               />
             </div>
           );
@@ -763,6 +792,7 @@ export default function Bets({ playerId }) {
               holeData={allHoles[bet.matchId] || {}}
               players={players}
               allPresses={presses}
+              playerId={playerId}
             />
           ))
         )}
