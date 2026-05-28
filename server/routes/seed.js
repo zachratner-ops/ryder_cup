@@ -38,9 +38,44 @@ const PLAYERS = [
 
 const PM = Object.fromEntries(PLAYERS.map(p => [p.id, p]));
 
+// ── Seeded PRNG (Mulberry32) ─────────────────────────────────────────────────
+// Pass ?seed=N to reproduce any tournament, or omit for a fresh random one.
+// Each call to rng() returns a float in [0, 1).
+
+function makePRNG(seed) {
+  let s = seed >>> 0;
+  return function () {
+    s |= 0;
+    s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ── Realistic gross score distribution ───────────────────────────────────────
+// Probabilities: [birdie, par, bogey, double, triple+]
+// Tiers: scratch-ish (≤6), mid (7-13), high (14+)
+const SCORE_PROBS = {
+  low:  [0.14, 0.48, 0.28, 0.08, 0.02],  // hcp ≤ 6
+  mid:  [0.05, 0.36, 0.38, 0.16, 0.05],  // hcp 7-13
+  high: [0.02, 0.20, 0.38, 0.28, 0.12],  // hcp 14+
+};
+
+function gross(par, handicap, rng) {
+  const tier = handicap <= 6 ? 'low' : handicap <= 13 ? 'mid' : 'high';
+  const probs = SCORE_PROBS[tier];
+  const r = rng();
+  let cum = 0;
+  for (let i = 0; i < probs.length; i++) {
+    cum += probs[i];
+    if (r < cum) return Math.max(1, par + (i - 1)); // i=0 → birdie, i=1 → par, ...
+  }
+  return par + 3; // fallback triple
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-// Stroke allocation for fourball / singles: each player vs the match minimum handicap.
 function buildAlloc(playerIds) {
   const minHcp = Math.min(...playerIds.map(id => PM[id].handicap));
   const bySI = [...COURSE_HOLES].sort((a, b) => a.strokeIndex - b.strokeIndex);
@@ -52,20 +87,6 @@ function buildAlloc(playerIds) {
   return alloc;
 }
 
-// Deterministic gross score: varies by player seed, hole index, and handicap.
-// Produces a realistic spread without using Math.random().
-function gross(par, hcp, seed, hi /* hole index 0-17 */) {
-  // Two-component pseudo-noise so consecutive holes differ and rounds differ
-  const noise = ((seed * 17 + hi * 13) % 9) - 3;   // -3..5, integer
-  const clamped = Math.max(-1, Math.min(3, noise));  // -1..3 (birdie to triple)
-  // Base strokes over par grows with handicap
-  const base = hcp <= 5 ? 0 : hcp <= 10 ? 1 : hcp <= 15 ? 2 : 3;
-  // Low-hcp players shifted a stroke lower so they make more birdies
-  const adj = hcp <= 6 ? clamped - 1 : clamped;
-  return Math.max(par - 1, par + base + adj);        // floor at birdie
-}
-
-// Running match-play status string after a given diff / holes played.
 function statusStr(diff, played) {
   if (played === 0) return 'All Square';
   const rem = 18 - played;
@@ -74,7 +95,6 @@ function statusStr(diff, played) {
   return m > rem ? `${m}UP (closed)` : `${m}UP thru ${played}`;
 }
 
-// Award points for a match result.
 function pts(winner, value) {
   if (winner === 'teamA') return { a: value, b: 0 };
   if (winner === 'teamB') return { a: 0, b: value };
@@ -83,20 +103,16 @@ function pts(winner, value) {
 
 // ── Match hole builders ──────────────────────────────────────────────────────
 
-// Fourball / Singles / Foursomes (seeded as fourball).
-// matchSeed: unique integer per match to diversify score patterns across rounds.
-// n: holes to generate data for (18 = complete, <18 = in-progress).
-// Returns the match winner: 'teamA' | 'teamB' | 'half'.
-function buildBallHoles(u, matchId, teamAIds, teamBIds, alloc, matchSeed, n = 18) {
+function buildBallHoles(u, matchId, teamAIds, teamBIds, alloc, rng, n = 18) {
   const allIds = [...teamAIds, ...teamBIds];
 
-  // Pre-generate all gross scores
+  // Generate all gross scores up front
   const scores = {};
-  allIds.forEach((pid, pos) => {
-    scores[pid] = COURSE_HOLES.slice(0, n).map(({ par }, hi) =>
-      gross(par, PM[pid].handicap, matchSeed * 31 + pos * 7, hi)
+  for (const pid of allIds) {
+    scores[pid] = COURSE_HOLES.slice(0, n).map(({ par }) =>
+      gross(par, PM[pid].handicap, rng)
     );
-  });
+  }
 
   let diff = 0, played = 0;
   for (let h = 1; h <= n; h++) {
@@ -104,7 +120,7 @@ function buildBallHoles(u, matchId, teamAIds, teamBIds, alloc, matchSeed, n = 18
     const isPar3 = par === 3;
     const holeObj = {};
 
-    allIds.forEach(pid => {
+    for (const pid of allIds) {
       const g = scores[pid][h - 1];
       const net = g - (alloc[pid]?.holes?.includes(h) ? 1 : 0);
       holeObj[pid] = {
@@ -114,7 +130,7 @@ function buildBallHoles(u, matchId, teamAIds, teamBIds, alloc, matchSeed, n = 18
         gir: g <= par + 1,
         putts: net <= par ? 1 : 2,
       };
-    });
+    }
 
     const bestA = Math.min(...teamAIds.map(id => holeObj[id].net));
     const bestB = Math.min(...teamBIds.map(id => holeObj[id].net));
@@ -131,16 +147,15 @@ function buildBallHoles(u, matchId, teamAIds, teamBIds, alloc, matchSeed, n = 18
   return diff > 0 ? 'teamA' : diff < 0 ? 'teamB' : 'half';
 }
 
-// Yellow Ball — net = gross (no handicap). Returns the cumulative winner.
-function buildYBHoles(u, matchId, teamAIds, teamBIds, carrierA, carrierB, matchSeed, n = 18) {
+function buildYBHoles(u, matchId, teamAIds, teamBIds, carrierA, carrierB, rng, n = 18) {
   const allIds = [...teamAIds, ...teamBIds];
 
   const scores = {};
-  allIds.forEach((pid, pos) => {
-    scores[pid] = COURSE_HOLES.slice(0, n).map(({ par }, hi) =>
-      gross(par, PM[pid].handicap, matchSeed * 31 + pos * 7, hi)
+  for (const pid of allIds) {
+    scores[pid] = COURSE_HOLES.slice(0, n).map(({ par }) =>
+      gross(par, PM[pid].handicap, rng)
     );
-  });
+  }
 
   let cumA = 0, cumB = 0;
   for (let h = 1; h <= n; h++) {
@@ -150,16 +165,16 @@ function buildYBHoles(u, matchId, teamAIds, teamBIds, carrierA, carrierB, matchS
     const cB = carrierB[(h - 1) % carrierB.length];
     const holeObj = {};
 
-    allIds.forEach(pid => {
+    for (const pid of allIds) {
       const g = scores[pid][h - 1];
       holeObj[pid] = {
         gross: g,
-        net: g,                          // YB: no handicap
+        net: g,
         fairwayHit: isPar3 ? null : g <= par,
         gir: g <= par + 1,
         putts: g <= par ? 1 : 2,
       };
-    });
+    }
 
     const ybNetA = scores[cA][h - 1];
     const ybNetB = scores[cB][h - 1];
@@ -176,18 +191,32 @@ function buildYBHoles(u, matchId, teamAIds, teamBIds, carrierA, carrierB, matchS
 }
 
 // ── POST /api/seed ───────────────────────────────────────────────────────────
+// Query params:
+//   seed    - integer seed for reproducible results (default: random)
+//   r4holes - holes played in round 4 fourball (default: 12, range 0-18)
+//   r5holes - holes played in round 5 yellow ball (default: 9, range 0-18)
 
 router.post('/', async (req, res) => {
   try {
-    await db.ref('/').set(null); // wipe existing data
+    // Resolve seed: use provided value or generate a random one
+    const seed = req.query.seed != null
+      ? (parseInt(req.query.seed) >>> 0)
+      : (Date.now() & 0xFFFFFFFF);
+
+    const r4holes = Math.min(18, Math.max(0, parseInt(req.query.r4holes ?? '12')));
+    const r5holes = Math.min(18, Math.max(0, parseInt(req.query.r5holes ?? '9')));
+
+    const rng = makePRNG(seed);
+
+    await db.ref('/').set(null);
     const u = {};
 
     // Tournament meta
-    u['tournament/name']   = 'GrayBull Ryder Cup';
-    u['tournament/status'] = 'active';
+    u['tournament/name']     = 'GrayBull Ryder Cup';
+    u['tournament/status']   = 'active';
     u['tournament/adminPin'] = '1234';
-    u['tournament/teamA']  = { name: 'Northwestern', color: '#4E2A84' };
-    u['tournament/teamB']  = { name: 'Nebraska',     color: '#D00000' };
+    u['tournament/teamA']    = { name: 'Northwestern', color: '#4E2A84' };
+    u['tournament/teamB']    = { name: 'Nebraska',     color: '#D00000' };
 
     // Players
     for (const p of PLAYERS) {
@@ -200,7 +229,6 @@ router.post('/', async (req, res) => {
       u[`course/holes/${h.number}`] = { par: h.par, strokeIndex: h.strokeIndex };
     }
 
-    // Running leaderboard totals — accumulated as we build each round
     let lbA = 0, lbB = 0;
 
     // ── Round 1 · Four-ball · COMPLETE ──────────────────────────────────────
@@ -208,9 +236,8 @@ router.post('/', async (req, res) => {
 
     const r1a1 = buildAlloc(['player1','player2','player5','player6']);
     const r1a2 = buildAlloc(['player3','player4','player7','player8']);
-
-    const r1w1 = buildBallHoles(u, 'match1', ['player1','player2'], ['player5','player6'], r1a1, 101);
-    const r1w2 = buildBallHoles(u, 'match2', ['player3','player4'], ['player7','player8'], r1a2, 102);
+    const r1w1 = buildBallHoles(u, 'match1', ['player1','player2'], ['player5','player6'], r1a1, rng);
+    const r1w2 = buildBallHoles(u, 'match2', ['player3','player4'], ['player7','player8'], r1a2, rng);
 
     u['matches/match1'] = {
       roundId: 'round1', format: 'fourball', status: 'complete',
@@ -228,8 +255,7 @@ router.post('/', async (req, res) => {
     };
 
     const r1 = [r1w1, r1w2].reduce((acc, w) => {
-      const p = pts(w, 1);
-      return { a: acc.a + p.a, b: acc.b + p.b };
+      const p = pts(w, 1); return { a: acc.a + p.a, b: acc.b + p.b };
     }, { a: 0, b: 0 });
     u['leaderboard/rounds/round1'] = { teamA_pts: r1.a, teamB_pts: r1.b, status: 'complete' };
     lbA += r1.a; lbB += r1.b;
@@ -238,16 +264,16 @@ router.post('/', async (req, res) => {
     u['rounds/round2'] = { format: 'singles', pointsValue: 1, order: 2, status: 'complete' };
 
     const singlesMatchups = [
-      ['match3', 'player1', 'player5', 201],  // Zach vs Justin
-      ['match4', 'player2', 'player6', 202],  // Matt vs Ryan
-      ['match5', 'player3', 'player7', 203],  // Jared vs Brother
-      ['match6', 'player4', 'player8', 204],  // Ben vs Dan
+      ['match3', 'player1', 'player5'],
+      ['match4', 'player2', 'player6'],
+      ['match5', 'player3', 'player7'],
+      ['match6', 'player4', 'player8'],
     ];
 
     let r2 = { a: 0, b: 0 };
-    for (const [mid, aId, bId, seed] of singlesMatchups) {
+    for (const [mid, aId, bId] of singlesMatchups) {
       const alloc = buildAlloc([aId, bId]);
-      const winner = buildBallHoles(u, mid, [aId], [bId], alloc, seed);
+      const winner = buildBallHoles(u, mid, [aId], [bId], alloc, rng);
       u[`matches/${mid}`] = {
         roundId: 'round2', format: 'singles', status: 'complete',
         teamA: { playerIds: [aId] },
@@ -262,14 +288,12 @@ router.post('/', async (req, res) => {
     lbA += r2.a; lbB += r2.b;
 
     // ── Round 3 · Foursomes · COMPLETE ──────────────────────────────────────
-    // Seeded as fourball for display purposes (all players have scores).
     u['rounds/round3'] = { format: 'foursomes', pointsValue: 1, order: 3, status: 'complete' };
 
     const r3a1 = buildAlloc(['player1','player2','player5','player6']);
     const r3a2 = buildAlloc(['player3','player4','player7','player8']);
-
-    const r3w1 = buildBallHoles(u, 'match7', ['player1','player2'], ['player5','player6'], r3a1, 301);
-    const r3w2 = buildBallHoles(u, 'match8', ['player3','player4'], ['player7','player8'], r3a2, 302);
+    const r3w1 = buildBallHoles(u, 'match7', ['player1','player2'], ['player5','player6'], r3a1, rng);
+    const r3w2 = buildBallHoles(u, 'match8', ['player3','player4'], ['player7','player8'], r3a2, rng);
 
     u['matches/match7'] = {
       roundId: 'round3', format: 'foursomes', status: 'complete',
@@ -287,20 +311,18 @@ router.post('/', async (req, res) => {
     };
 
     const r3 = [r3w1, r3w2].reduce((acc, w) => {
-      const p = pts(w, 1);
-      return { a: acc.a + p.a, b: acc.b + p.b };
+      const p = pts(w, 1); return { a: acc.a + p.a, b: acc.b + p.b };
     }, { a: 0, b: 0 });
     u['leaderboard/rounds/round3'] = { teamA_pts: r3.a, teamB_pts: r3.b, status: 'complete' };
     lbA += r3.a; lbB += r3.b;
 
-    // ── Round 4 · Four-ball · ACTIVE (12 holes played) ──────────────────────
+    // ── Round 4 · Four-ball · ACTIVE ────────────────────────────────────────
     u['rounds/round4'] = { format: 'fourball', pointsValue: 1, order: 4, status: 'active' };
 
     const r4a1 = buildAlloc(['player1','player2','player5','player6']);
     const r4a2 = buildAlloc(['player3','player4','player7','player8']);
-
-    buildBallHoles(u, 'match9',  ['player1','player2'], ['player5','player6'], r4a1, 401, 12);
-    buildBallHoles(u, 'match10', ['player3','player4'], ['player7','player8'], r4a2, 402, 12);
+    buildBallHoles(u, 'match9',  ['player1','player2'], ['player5','player6'], r4a1, rng, r4holes);
+    buildBallHoles(u, 'match10', ['player3','player4'], ['player7','player8'], r4a2, rng, r4holes);
 
     u['matches/match9'] = {
       roundId: 'round4', format: 'fourball', status: 'active',
@@ -315,16 +337,15 @@ router.post('/', async (req, res) => {
       strokeAllocation: r4a2, result: null,
     };
 
-    // ── Round 5 · Yellow Ball · ACTIVE (9 holes played) ─────────────────────
+    // ── Round 5 · Yellow Ball · ACTIVE ──────────────────────────────────────
     u['rounds/round5'] = { format: 'yellowball', pointsValue: 2, order: 5, status: 'active' };
 
     const ybCarrierA = ['player1','player2','player3','player4'];
     const ybCarrierB = ['player5','player6','player7','player8'];
-
     buildYBHoles(u, 'match11',
       ['player1','player2','player3','player4'],
       ['player5','player6','player7','player8'],
-      ybCarrierA, ybCarrierB, 501, 9
+      ybCarrierA, ybCarrierB, rng, r5holes
     );
 
     u['matches/match11'] = {
@@ -338,22 +359,20 @@ router.post('/', async (req, res) => {
 
     // ── Round 6 · Foursomes · SETUP ─────────────────────────────────────────
     u['rounds/round6'] = { format: 'foursomes', pointsValue: 1, order: 6, status: 'setup' };
-    // No matches yet — admin sets pairings before starting
 
     // ── Leaderboard ──────────────────────────────────────────────────────────
-    // ptsAvailable = active rounds (R4: 2×1pt, R5: 1×2pts) + setup round with
-    // expected 2 foursomes matches (R6: 2×1pt)
     const ptsAvailable = 2 + 2 + 2;
-
-    u['leaderboard/teamA_pts']   = lbA;
-    u['leaderboard/teamB_pts']   = lbB;
+    u['leaderboard/teamA_pts']    = lbA;
+    u['leaderboard/teamB_pts']    = lbB;
     u['leaderboard/ptsAvailable'] = ptsAvailable;
-    u['leaderboard/lastUpdated'] = Date.now();
+    u['leaderboard/lastUpdated']  = Date.now();
 
     await db.ref().update(u);
 
     res.json({
       ok: true,
+      seed,                    // echo back so you can reproduce this exact tournament
+      params: { r4holes, r5holes },
       adminPin: '1234',
       leaderboard: { teamA: lbA, teamB: lbB, ptsAvailable },
       roundResults: {
