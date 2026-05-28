@@ -52,9 +52,31 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
   // Custom create form
   const [createTab, setCreateTab] = useState('nassau');
   const [customDesc, setCustomDesc] = useState('');
-  const [customPlayerA, setCustomPlayerA] = useState(playerId || '');
-  const [customPlayerB, setCustomPlayerB] = useState('');
+  const [customPlayerIds, setCustomPlayerIds] = useState(playerId ? [playerId] : []);
   const [customAmount, setCustomAmount] = useState('');
+
+  // Inline settle state
+  const [settlingBetId, setSettlingBetId] = useState(null);
+  const [settleWinners, setSettleWinners] = useState([]);
+
+  function toggleCustomPlayer(id) {
+    setCustomPlayerIds(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
+  }
+
+  // Backward-compat helpers
+  function getBetPlayerIds(bet) {
+    if (Array.isArray(bet.players)) return bet.players;
+    return [bet.playerA, bet.playerB].filter(Boolean);
+  }
+
+  function getBetWinnerIds(bet) {
+    if (bet.status !== 'settled') return null;
+    if (Array.isArray(bet.winners)) return bet.winners;
+    const all = getBetPlayerIds(bet);
+    if (bet.winner === 'half') return all;
+    if (bet.winner) return [bet.winner];
+    return null;
+  }
 
   useEffect(() => {
     const u = onValue(ref(db, 'presses'), (s) => setPresses(s.val() || {}));
@@ -67,11 +89,12 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
     [nassauBets, matchId]
   );
 
-  // Custom bets where both players are in this match
+  // Custom bets where any player is in this match
   const matchCustomBets = useMemo(() =>
-    Object.entries(customBets).filter(([, b]) =>
-      allPlayerIds.includes(b.playerA) && allPlayerIds.includes(b.playerB)
-    ),
+    Object.entries(customBets).filter(([, b]) => {
+      const pids = Array.isArray(b.players) ? b.players : [b.playerA, b.playerB].filter(Boolean);
+      return pids.some(pid => allPlayerIds.includes(pid));
+    }),
     [customBets, allPlayerIds]
   );
 
@@ -110,8 +133,12 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
   }
 
   async function handleCreateCustom() {
-    if (!customDesc.trim() || !customPlayerA || !customPlayerB || !customAmount) {
+    if (!customDesc.trim() || !customAmount) {
       setCreateError('Fill in all fields.');
+      return;
+    }
+    if (customPlayerIds.length < 2) {
+      setCreateError('Select at least two players.');
       return;
     }
     setCreateLoading(true);
@@ -119,10 +146,9 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
     try {
       await push(ref(db, 'customBets'), {
         description: customDesc.trim(),
-        playerA: customPlayerA,
-        playerB: customPlayerB,
+        players: customPlayerIds,
         amount: parseFloat(customAmount),
-        winner: null,
+        winners: null,
         createdBy: playerId || 'unknown',
         createdAt: Date.now(),
         status: 'open',
@@ -131,8 +157,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
       });
       setShowCreate(false);
       setCustomDesc('');
-      setCustomPlayerA(playerId || '');
-      setCustomPlayerB('');
+      setCustomPlayerIds(playerId ? [playerId] : []);
       setCustomAmount('');
     } catch (e) {
       setCreateError(e.message);
@@ -141,23 +166,30 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
     }
   }
 
-  async function handleSettle(betId) {
-    // Simple settle — just mark as halved/admin settles; full settle goes through Bets page
-    // On mobile we just prompt which player won
-    const bet = customBets[betId];
+  function startSettle(betId) {
+    setSettlingBetId(betId);
+    setSettleWinners([]);
+  }
+
+  async function confirmSettle() {
+    if (!settlingBetId || !settleWinners.length) return;
+    const bet = customBets[settlingBetId];
     if (!bet) return;
-    // Use native prompt for simplicity — full settle UI is on Bets page
-    const choice = window.prompt(
-      `Settle "${bet.description}"\n1 = ${betFirstName(players, bet.playerA)} wins\n2 = ${betFirstName(players, bet.playerB)} wins\n3 = Halved`
-    );
-    const winner = choice === '1' ? bet.playerA : choice === '2' ? bet.playerB : choice === '3' ? 'half' : null;
-    if (!winner) return;
-    await update(ref(db, `customBets/${betId}`), {
-      winner,
-      status: 'settled',
-      settledBy: playerId || 'unknown',
-      settledAt: Date.now(),
-    });
+    const allPlayers = getBetPlayerIds(bet);
+    const allTied = settleWinners.length === allPlayers.length;
+    try {
+      await update(ref(db, `customBets/${settlingBetId}`), {
+        winners: settleWinners,
+        winner: allTied ? 'half' : settleWinners[0],
+        status: 'settled',
+        settledBy: playerId || 'unknown',
+        settledAt: Date.now(),
+      });
+    } catch (e) {
+      console.error(e);
+    }
+    setSettlingBetId(null);
+    setSettleWinners([]);
   }
 
   async function handlePress(cfg) {
@@ -323,31 +355,88 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
       {matchNassauBets.map(renderNassauCard)}
 
       {/* Custom bets */}
-      {matchCustomBets.map(([betId, bet]) => (
-        <div key={betId} className={styles.customBetCard}>
-          <div className={styles.customBetHeader}>
-            <span className={styles.customBetDesc}>{bet.description}</span>
-            <span className={styles.customBetAmount}>${bet.amount}</span>
-          </div>
-          <div className={styles.customBetFooter}>
-            <span className={styles.customBetPlayers}>
-              <span style={{ color: betTeamColor(players, bet.playerA), fontWeight: 700 }}>{betFirstName(players, bet.playerA)}</span>
-              <span style={{ color: 'var(--text-muted)' }}> vs </span>
-              <span style={{ color: betTeamColor(players, bet.playerB), fontWeight: 700 }}>{betFirstName(players, bet.playerB)}</span>
-            </span>
-            {bet.status === 'settled' ? (
-              <span className={styles.betStatusSettled}>
-                {bet.winner === 'half' ? 'Halved' : `${betFirstName(players, bet.winner)} wins`}
+      {matchCustomBets.map(([betId, bet]) => {
+        const betPids = getBetPlayerIds(bet);
+        const winnerIds = getBetWinnerIds(bet);
+        const allTied = winnerIds && winnerIds.length === betPids.length;
+        const settledLabel = winnerIds
+          ? allTied ? 'Halved' : winnerIds.map(pid => betFirstName(players, pid)).join(' & ') + ' wins'
+          : null;
+        const isSettling = settlingBetId === betId;
+
+        return (
+          <div key={betId} className={styles.customBetCard}>
+            <div className={styles.customBetHeader}>
+              <span className={styles.customBetDesc}>{bet.description}</span>
+              <span className={styles.customBetAmount}>${bet.amount}</span>
+            </div>
+            <div className={styles.customBetFooter}>
+              <span className={styles.customBetPlayers}>
+                {betPids.map((pid, i) => (
+                  <span key={pid}>
+                    {i > 0 && <span style={{ color: 'var(--text-muted)' }}> · </span>}
+                    <span style={{ color: betTeamColor(players, pid), fontWeight: 700 }}>{betFirstName(players, pid)}</span>
+                  </span>
+                ))}
               </span>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className={styles.betStatusOpen}>Open</span>
-                <button className={styles.betSettleBtn} onClick={() => handleSettle(betId)}>Settle</button>
+              {bet.status === 'settled' ? (
+                <span className={styles.betStatusSettled}>{settledLabel}</span>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className={styles.betStatusOpen}>Open</span>
+                  <button className={styles.betSettleBtn} onClick={() => startSettle(betId)}>Settle</button>
+                </div>
+              )}
+            </div>
+            {/* Inline settle panel */}
+            {isSettling && (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: 8 }}>
+                  Who won?
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                  {betPids.map(pid => {
+                    const on = settleWinners.includes(pid);
+                    return (
+                      <button
+                        key={pid}
+                        type="button"
+                        style={{
+                          padding: '6px 14px', borderRadius: 20,
+                          border: `1.5px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
+                          background: on ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'var(--surface2)',
+                          color: on ? 'var(--accent)' : 'var(--text-muted)',
+                          fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                        }}
+                        onClick={() => setSettleWinners(prev =>
+                          prev.includes(pid) ? prev.filter(p => p !== pid) : [...prev, pid]
+                        )}
+                      >
+                        {betFirstName(players, pid)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    style={{ flex: 1, background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 8, padding: '10px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: settleWinners.length ? 1 : 0.4 }}
+                    onClick={confirmSettle}
+                    disabled={!settleWinners.length}
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    style={{ flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px', fontSize: 14, fontWeight: 600, color: 'var(--text-muted)', cursor: 'pointer' }}
+                    onClick={() => setSettlingBetId(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             )}
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       {/* Press confirm overlay */}
       {confirmPress && (
@@ -433,33 +522,31 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
                 />
               </div>
               <div>
-                <div className={styles.sectionLabel}>Player A</div>
-                <select
-                  style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '11px 14px', fontSize: 15, width: '100%', color: 'var(--text)' }}
-                  value={customPlayerA}
-                  onChange={(e) => setCustomPlayerA(e.target.value)}
-                >
-                  <option value="">Select…</option>
-                  {allPlayerIds.filter(id => id !== customPlayerB).map(id => (
-                    <option key={id} value={id}>{players[id]?.name || id}</option>
-                  ))}
-                </select>
+                <div className={styles.sectionLabel}>Players (select all involved)</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {allPlayerIds.map(id => {
+                    const on = customPlayerIds.includes(id);
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        style={{
+                          padding: '7px 14px', borderRadius: 20,
+                          border: `1.5px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
+                          background: on ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'var(--surface2)',
+                          color: on ? 'var(--accent)' : 'var(--text-muted)',
+                          fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                        }}
+                        onClick={() => toggleCustomPlayer(id)}
+                      >
+                        {players[id]?.name?.split(' ')[0] || id}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div>
-                <div className={styles.sectionLabel}>Player B</div>
-                <select
-                  style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '11px 14px', fontSize: 15, width: '100%', color: 'var(--text)' }}
-                  value={customPlayerB}
-                  onChange={(e) => setCustomPlayerB(e.target.value)}
-                >
-                  <option value="">Select…</option>
-                  {allPlayerIds.filter(id => id !== customPlayerA).map(id => (
-                    <option key={id} value={id}>{players[id]?.name || id}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <div className={styles.sectionLabel}>$ Amount</div>
+                <div className={styles.sectionLabel}>$ Amount (per person)</div>
                 <input
                   style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '11px 14px', fontSize: 15, width: '100%', color: 'var(--text)', boxSizing: 'border-box' }}
                   type="number"
