@@ -326,10 +326,32 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
               p.nassauBetId === betId && p.segment === label && p.parentPressId == null
             );
 
+            // Pick block accent class
+            const blockMod = decided
+              ? (s.winner === 'half' ? styles.nassauSegBlockHalf
+                : s.winner === 'playerA' ? styles.nassauSegBlockWon
+                : styles.nassauSegBlockLost)
+              : s.holesPlayed > 0 ? styles.nassauSegBlockInProgress : '';
+
+            // For a viewer who is playerB, wins/losses are flipped
+            const isPlayerA = bet.playerA === playerId;
+            const viewerWon = decided && s.winner !== 'half' && (
+              (isPlayerA && s.winner === 'playerA') || (!isPlayerA && s.winner === 'playerB')
+            );
+            const payoutColor = s.winner === 'half' ? 'var(--text-muted)'
+              : viewerWon ? 'var(--green)' : '#dc2626';
+
             return (
-              <div key={label}>
-                <div className={styles.nassauSegRow}>
+              <div key={label} className={`${styles.nassauSegBlock} ${blockMod}`}>
+                <div className={styles.nassauSegBlockHeader}>
                   <span className={styles.nassauSegLabel}>{label}</span>
+                  {decided && (
+                    <span style={{ fontSize: 13, fontWeight: 700, color: payoutColor }}>
+                      {s.winner === 'half' ? 'Halved' : (viewerWon ? `+$${bet.amount}` : `-$${bet.amount}`)}
+                    </span>
+                  )}
+                </div>
+                <div className={styles.nassauSegRow}>
                   <span className={`${styles.nassauSegStatus} ${
                     decided && s.winner !== 'half' ? styles.nassauSegStatusWon :
                     s.holesPlayed === 0 ? styles.nassauSegStatusMuted : ''

@@ -114,29 +114,37 @@ function NassauBetCard({ betId, bet, holeData, players, allPresses }) {
         {componentStatuses.map(({ label, startHole, endHole, status: s }) => {
           const statusStr = formatSegmentStatus(s, nameA, nameB, startHole, endHole);
           const decided = s.winner !== 'incomplete';
-          const aDelta = decided ? (s.winner === 'playerA' ? bet.amount : s.winner === 'playerB' ? -bet.amount : 0) : null;
+          const aDelta = decided
+            ? (s.winner === 'playerA' ? bet.amount : s.winner === 'playerB' ? -bet.amount : 0)
+            : null;
+
+          const blockMod = decided
+            ? (s.winner === 'half' ? styles.segBlockHalf
+              : aDelta > 0 ? styles.segBlockWon
+              : styles.segBlockLost)
+            : s.holesPlayed > 0 ? styles.segBlockInProgress : '';
 
           return (
-            <div key={label}>
-              <div className={styles.segRow}>
+            <div key={label} className={`${styles.segBlock} ${blockMod}`}>
+              <div className={styles.segBlockHeader}>
                 <span className={styles.segLabel}>{label}</span>
-                <span
-                  className={`${styles.segStatus} ${
-                    decided && s.winner !== 'half' ? styles.segStatusWon :
-                    s.holesPlayed === 0 ? styles.segStatusMuted : ''
-                  }`}
-                >
-                  {statusStr}
-                </span>
                 {decided && (
                   <span
                     className={styles.segPayout}
                     style={{ color: aDelta > 0 ? 'var(--green)' : aDelta < 0 ? '#dc2626' : 'var(--text-muted)' }}
                   >
-                    {s.winner === 'half' ? 'Halved' : `$${bet.amount}`}
+                    {s.winner === 'half' ? 'Halved' : (aDelta > 0 ? `+$${bet.amount}` : `-$${bet.amount}`)}
                   </span>
                 )}
               </div>
+              <span
+                className={`${styles.segStatus} ${
+                  decided && s.winner !== 'half' ? styles.segStatusWon :
+                  s.holesPlayed === 0 ? styles.segStatusMuted : ''
+                }`}
+              >
+                {statusStr}
+              </span>
               <PressRows
                 presses={pressesByLabel[label] || []}
                 nassauBet={bet}

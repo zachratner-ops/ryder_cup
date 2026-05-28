@@ -657,28 +657,59 @@
 .nassauSegments {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
-.nassauSegRow {
+/* ── Segment sub-card ────────────────────────────────── */
+
+.nassauSegBlock {
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  background: var(--surface2);
+}
+
+.nassauSegBlockInProgress {
+  border-left-color: var(--accent);
+}
+
+.nassauSegBlockWon {
+  background: color-mix(in srgb, var(--green) 9%, var(--surface2));
+  border-color: color-mix(in srgb, var(--green) 28%, var(--border));
+  border-left-color: var(--green);
+}
+
+.nassauSegBlockLost {
+  background: color-mix(in srgb, #dc2626 6%, var(--surface2));
+  border-color: color-mix(in srgb, #dc2626 22%, var(--border));
+  border-left-color: #dc2626;
+}
+
+.nassauSegBlockHalf {
+  border-left-color: var(--text-muted);
+}
+
+.nassauSegBlockHeader {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
+  margin-bottom: 4px;
 }
 
 .nassauSegLabel {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
   color: var(--text-muted);
-  width: 64px;
-  flex-shrink: 0;
 }
 
 .nassauSegStatus {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text);
-  flex: 1;
+  line-height: 1.2;
 }
 
 .nassauSegStatusWon {
@@ -687,28 +718,36 @@
 
 .nassauSegStatusMuted {
   color: var(--text-muted);
+  font-weight: 500;
+}
+
+.nassauSegRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .nassauPressBtn {
   background: transparent;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--accent);
   border-radius: 20px;
   padding: 3px 9px;
   font-size: 12px;
   font-weight: 600;
   color: var(--accent);
-  border-color: var(--accent);
   cursor: pointer;
   flex-shrink: 0;
 }
 
 .pressRows {
-  margin-top: 4px;
-  padding-left: 12px;
+  margin-top: 8px;
+  padding-top: 8px;
+  padding-left: 10px;
+  border-top: 1px solid var(--border);
   border-left: 2px solid var(--border);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 
 .pressRow {
