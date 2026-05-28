@@ -1,8 +1,10 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
+
+/* ── Round / step tabs ───────────────────────────────────────────────────── */
 
 .steps {
   display: flex;
@@ -15,7 +17,10 @@
 
 .stepBtn {
   flex-shrink: 0;
-  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 14px;
   border-radius: 20px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -30,28 +35,63 @@
   color: white;
 }
 
+.stepDone {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.tabDot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  flex-shrink: 0;
+}
+
+.tabCheck {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── Section card ────────────────────────────────────────────────────────── */
+
 .section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top-width: 3px;
+  border-top-color: var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
+}
+
+.sectionActive {
+  border-top-color: var(--green);
+}
+
+.sectionDone {
+  border-top-color: var(--border);
+  opacity: 0.85;
 }
 
 .section label {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-top: 4px;
+  letter-spacing: 0.07em;
 }
 
 .section input,
 .section select {
-  background: var(--surface);
+  background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 12px 14px;
-  font-size: 16px;
+  padding: 11px 14px;
+  font-size: 15px;
   color: var(--text);
   width: 100%;
 }
@@ -60,44 +100,198 @@
 .section select:focus {
   outline: none;
   border-color: var(--teamA);
+  background: var(--surface);
 }
+
+/* ── Round meta header ───────────────────────────────────────────────────── */
+
+.roundMeta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.format {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.roundMetaSub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ptsChip {
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--surface2);
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+}
+
+.status {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+
+.live { color: var(--green); }
+
+.editToggle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
 
 .next,
 .submitBtn {
   background: var(--accent);
   color: white;
   border-radius: var(--radius);
-  padding: 16px;
-  font-size: 17px;
+  padding: 15px;
+  font-size: 16px;
   font-weight: 700;
   width: 100%;
-  margin-top: 8px;
 }
 
 .submitBtn:disabled { opacity: 0.4; }
 
 .closeBtn {
-  background: var(--teamA);
+  background: var(--green);
   color: white;
   border-radius: var(--radius);
-  padding: 16px;
-  font-size: 17px;
+  padding: 15px;
+  font-size: 16px;
   font-weight: 700;
   width: 100%;
-  margin-top: 8px;
 }
 
 .closeBtn:disabled { opacity: 0.4; }
+
+.deleteBtn {
+  background: transparent;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius);
+  padding: 13px;
+  font-size: 14px;
+  font-weight: 600;
+  width: 100%;
+}
+
+.addRound {
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  padding: 4px 0;
+}
+
+.removeRound {
+  color: var(--text-muted);
+  font-size: 16px;
+  padding: 4px 6px;
+}
+
+/* ── Sub-sections header ─────────────────────────────────────────────────── */
+
+.pairingsHeader {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+}
+
+/* ── Pairings ────────────────────────────────────────────────────────────── */
+
+.pairingCard {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pairingRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pairingTeam {
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 44px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.playerSelect {
+  flex: 1;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px !important;
+  font-size: 14px !important;
+  background: var(--surface) !important;
+  width: auto !important;
+}
+
+/* ── Active matches ──────────────────────────────────────────────────────── */
+
+.activeMatch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 14px;
+}
+
+.vs {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.complete {
+  color: var(--green);
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  padding: 24px;
+}
+
+/* ── Forms ───────────────────────────────────────────────────────────────── */
 
 .teamGroup {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 8px;
 }
 
 .teamHeader {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -119,8 +313,8 @@
 .holeGrid {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 400px;
+  gap: 4px;
+  max-height: 380px;
   overflow-y: auto;
 }
 
@@ -128,11 +322,12 @@
   display: grid;
   grid-template-columns: 40px 80px 80px;
   gap: 8px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
   font-weight: 700;
   text-transform: uppercase;
   padding: 0 4px;
+  letter-spacing: 0.06em;
 }
 
 .holeRow {
@@ -144,13 +339,13 @@
 
 .holeRow select,
 .holeRow input {
-  padding: 8px !important;
-  font-size: 15px !important;
+  padding: 7px !important;
+  font-size: 14px !important;
   text-align: center;
 }
 
 .holeNum {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   text-align: center;
   color: var(--text-muted);
@@ -165,10 +360,11 @@
 .roundRow select { flex: 1; }
 
 .roundNum {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
   min-width: 60px;
+  color: var(--text-muted);
 }
 
 .ptsInput {
@@ -177,190 +373,61 @@
 }
 
 .ptsLabel {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.removeRound {
-  color: var(--teamA);
-  font-size: 18px;
-  padding: 4px 8px;
-}
-
-.addRound {
-  color: var(--accent);
-  font-size: 15px;
-  text-align: left;
-  padding: 4px 0;
-}
-
-.roundMeta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.ptsChip {
   font-size: 12px;
-  font-weight: 700;
-  background: var(--surface2);
   color: var(--text-muted);
-  padding: 2px 8px;
-  border-radius: 20px;
 }
 
-.editToggle {
-  margin-left: auto;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--accent);
-  padding: 4px 10px;
-  border-radius: 20px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-}
+.formatSelect { flex: 1; }
 
-.deleteBtn {
-  background: transparent;
-  color: #e53e3e;
-  border: 1px solid #e53e3e;
-  border-radius: var(--radius);
-  padding: 14px;
-  font-size: 15px;
-  font-weight: 700;
-  width: 100%;
-  margin-top: 0;
-}
+/* ── Yellow ball ─────────────────────────────────────────────────────────── */
 
-.formatSelect {
-  flex: 1;
-}
-
-/* Yellow Ball admin */
 .ybHint {
   font-size: 12px;
   color: var(--text-muted);
-  margin-top: -4px;
+  line-height: 1.4;
 }
 
 .carrierSlotRow {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 8px;
 }
 
 .carrierSlotNum {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   color: var(--text-muted);
   min-width: 44px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .carrierSlotSelect {
   flex: 1;
   padding: 8px 10px !important;
-  font-size: 15px !important;
+  font-size: 14px !important;
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background: var(--surface) !important;
   border: 1px solid var(--border);
   color: var(--text);
   width: auto !important;
 }
 
-.format {
-  font-size: 16px;
-  font-weight: 700;
-  text-transform: capitalize;
-}
-
-.status {
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.live { color: var(--green); }
+/* ── Misc ────────────────────────────────────────────────────────────────── */
 
 .pinSmall {
   width: 140px !important;
   text-align: center;
   letter-spacing: 4px;
-  font-size: 20px !important;
-}
-
-.pairingsHeader {
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  letter-spacing: 0.06em;
-  margin-top: 8px;
-}
-
-.pairingCard {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.pairingRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.pairingTeam {
-  font-size: 13px;
-  font-weight: 700;
-  min-width: 50px;
-}
-
-.playerSelect {
-  flex: 1;
-  border-radius: var(--radius-sm);
-  height: auto !important;
-  padding: 6px !important;
-  font-size: 15px !important;
-}
-
-.activeMatch {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 12px 14px;
-  font-size: 15px;
-  font-weight: 500;
-}
-
-.vs {
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-.complete {
-  color: var(--green);
-  font-size: 15px;
-  font-weight: 600;
-  text-align: center;
-  padding: 20px;
+  font-size: 18px !important;
 }
 
 .msg {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   text-align: center;
   color: var(--green);
-  padding: 8px;
+  padding: 6px;
 }
 
 .success {

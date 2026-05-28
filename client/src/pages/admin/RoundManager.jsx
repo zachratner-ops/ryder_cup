@@ -5,6 +5,7 @@ import styles from './AdminForms.module.css';
 
 const FORMATS = ['fourball', 'foursomes', 'singles', 'yellowball'];
 const FORMAT_LABELS = { fourball: 'Four-ball', foursomes: 'Foursomes', singles: 'Singles', yellowball: 'Yellow Ball' };
+const FORMAT_ABBREV = { fourball: '4B', foursomes: 'FS', singles: '1v1', yellowball: 'YB' };
 
 export default function RoundManager({ tournament, adminPin: propPin }) {
   const [rounds, setRounds] = useState({});
@@ -174,10 +175,12 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
         {roundList.map(([id, r]) => (
           <button
             key={id}
-            className={`${styles.stepBtn} ${selectedRound === id ? styles.stepActive : ''}`}
+            className={`${styles.stepBtn} ${selectedRound === id ? styles.stepActive : ''} ${r.status === 'complete' ? styles.stepDone : ''}`}
             onClick={() => { setSelectedRound(id); setView('manage'); setMsg(''); setShowAdd(false); }}
           >
-            R{r.order}
+            <span>R{r.order} <span style={{ fontSize: 10, opacity: 0.75 }}>{FORMAT_ABBREV[r.format]}</span></span>
+            {r.status === 'active' && <span className={styles.tabDot} />}
+            {r.status === 'complete' && <span className={styles.tabCheck}>✓</span>}
           </button>
         ))}
         <button
@@ -232,12 +235,16 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
 
       {/* Selected round panel */}
       {round && !showAdd && (
-        <div className={styles.section}>
+        <div className={`${styles.section} ${round.status === 'active' ? styles.sectionActive : round.status === 'complete' ? styles.sectionDone : ''}`}>
           {/* Round header with edit toggle */}
           <div className={styles.roundMeta}>
-            <span className={styles.format}>{FORMAT_LABELS[round.format] || round.format}</span>
-            <span className={styles.ptsChip}>{round.pointsValue} pt{round.pointsValue !== 1 ? 's' : ''}</span>
-            <span className={`${styles.status} ${round.status === 'active' ? styles.live : ''}`}>{round.status}</span>
+            <div>
+              <div className={styles.format}>{FORMAT_LABELS[round.format] || round.format}</div>
+              <div className={styles.roundMetaSub}>
+                <span className={styles.ptsChip}>{round.pointsValue} pt{round.pointsValue !== 1 ? 's' : ''}</span>
+                <span className={`${styles.status} ${round.status === 'active' ? styles.live : ''}`}>{round.status}</span>
+              </div>
+            </div>
             {round.status === 'setup' && (
               <button
                 className={styles.editToggle}
@@ -399,9 +406,9 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
                   <div className={styles.pairingsHeader}>Active Matches</div>
                   {roundMatches.map(([mid, m]) => (
                     <div key={mid} className={styles.activeMatch}>
-                      <span>{m.teamA?.playerIds?.map((id) => players[id]?.name).join(' & ')}</span>
+                      <span style={{ color: 'var(--teamA)', fontWeight: 600 }}>{m.teamA?.playerIds?.map((id) => players[id]?.name?.split(' ')[0]).join(' & ')}</span>
                       <span className={styles.vs}>vs</span>
-                      <span>{m.teamB?.playerIds?.map((id) => players[id]?.name).join(' & ')}</span>
+                      <span style={{ color: 'var(--teamB)', fontWeight: 600 }}>{m.teamB?.playerIds?.map((id) => players[id]?.name?.split(' ')[0]).join(' & ')}</span>
                     </div>
                   ))}
                   <button className={styles.closeBtn} onClick={closeRound} disabled={busy}>

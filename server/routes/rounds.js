@@ -78,29 +78,51 @@ router.post('/:roundId/close', async (req, res) => {
     const tournSnap = await db.ref('tournament').once('value');
     if (tournSnap.val().adminPin !== adminPin) return res.status(403).json({ error: 'Bad PIN' });
 
-    // Fetch all matches for this round
-    const matchesSnap = await db.ref('matches').orderByChild('roundId').equalTo(roundId).once('value');
+    // Fetch matches, round config, and hole-by-hole data in parallel
+    const [matchesSnap, roundSnap, holesSnap] = await Promise.all([
+      db.ref('matches').orderByChild('roundId').equalTo(roundId).once('value'),
+      db.ref(`rounds/${roundId}`).once('value'),
+      db.ref('holes').once('value'),
+    ]);
     const matches = matchesSnap.val() || {};
-
-    const roundSnap = await db.ref(`rounds/${roundId}`).once('value');
     const round = roundSnap.val();
+    const allHoles = holesSnap.val() || {};
 
     let teamA_pts = 0;
     let teamB_pts = 0;
 
     const updates = {};
+    const pts = parseFloat(round?.pointsValue) || 1;
 
     for (const [matchId, match] of Object.entries(matches)) {
-      if (match.result) {
-        if (match.result.winner === 'teamA') teamA_pts += match.result.points;
-        else if (match.result.winner === 'teamB') teamB_pts += match.result.points;
-        else {
-          // half — split points
-          teamA_pts += match.result.points / 2;
-          teamB_pts += match.result.points / 2;
+      const matchHoles = allHoles[matchId] || {};
+      let winner;
+
+      if (match.format === 'yellowball') {
+        // Lower cumulative net yellow-ball score wins
+        let cumA = 0, cumB = 0;
+        for (let h = 1; h <= 18; h++) {
+          if (matchHoles[h]?.ybNetA != null) cumA += matchHoles[h].ybNetA;
+          if (matchHoles[h]?.ybNetB != null) cumB += matchHoles[h].ybNetB;
         }
+        winner = cumA < cumB ? 'teamA' : cumA > cumB ? 'teamB' : 'half';
+      } else {
+        // Match play: team with more holes won takes the match
+        let aHoles = 0, bHoles = 0;
+        for (let h = 1; h <= 18; h++) {
+          const hw = matchHoles[h]?.holeWinner;
+          if (hw === 'teamA') aHoles++;
+          else if (hw === 'teamB') bHoles++;
+        }
+        winner = aHoles > bHoles ? 'teamA' : bHoles > aHoles ? 'teamB' : 'half';
       }
+
+      updates[`matches/${matchId}/result`] = { winner, points: pts };
       updates[`matches/${matchId}/status`] = 'complete';
+
+      if (winner === 'teamA') teamA_pts += pts;
+      else if (winner === 'teamB') teamB_pts += pts;
+      else { teamA_pts += pts / 2; teamB_pts += pts / 2; }
     }
 
     updates[`rounds/${roundId}/status`] = 'complete';
@@ -125,6 +147,13 @@ router.post('/:roundId/close', async (req, res) => {
   }
 });
 
+// pointsValue is per-match; this maps format → number of matches in a round
+function matchCountForFormat(format) {
+  if (format === 'singles') return 4;
+  if (format === 'yellowball') return 1;
+  return 2; // fourball, foursomes
+}
+
 // Helper: recalculate ptsAvailable from all rounds minus already-awarded points
 async function recalcPtsAvailable(extraRounds = {}) {
   const [roundsSnap, lbSnap] = await Promise.all([
@@ -135,7 +164,7 @@ async function recalcPtsAvailable(extraRounds = {}) {
   const lb = lbSnap.val() || {};
   const totalRoundPts = Object.values(rounds)
     .filter((r) => r !== null)
-    .reduce((sum, r) => sum + (parseFloat(r.pointsValue) || 0), 0);
+    .reduce((sum, r) => sum + (parseFloat(r.pointsValue) || 0) * matchCountForFormat(r.format), 0);
   const awarded = (lb.teamA_pts || 0) + (lb.teamB_pts || 0);
   return Math.max(0, totalRoundPts - awarded);
 }

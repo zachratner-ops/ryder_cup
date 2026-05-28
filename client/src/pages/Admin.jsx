@@ -48,28 +48,31 @@ export default function Admin() {
 
   if (!authed) {
     return (
-      <div className={styles.page}>
-        <h1 className={styles.title}>Admin</h1>
-        <form onSubmit={handleLogin} className={styles.loginForm}>
-          <input
-            type="password"
-            inputMode="numeric"
-            placeholder="Enter PIN"
-            value={pin}
-            onChange={(e) => { setPin(e.target.value); setError(''); }}
-            className={styles.pinInput}
-            autoFocus
-          />
-          {error && <div className={styles.error}>{error}</div>}
-          <button type="submit" className={styles.loginBtn}>Enter</button>
-        </form>
-        {!tournament && (
-          <p className={styles.hint}>No tournament set up yet — enter any PIN to begin setup.</p>
-        )}
-        <div className={styles.divider}>or</div>
-        <button className={styles.seedBtn} onClick={handleSeed}>
-          🌱 Seed test data
-        </button>
+      <div className={styles.pinPage}>
+        <div className={styles.pinBox}>
+          <div className={styles.pinIcon}>🔒</div>
+          <h1 className={styles.title}>Admin</h1>
+          {!tournament && (
+            <p className={styles.hint}>No tournament yet — enter any PIN to begin setup.</p>
+          )}
+          <form onSubmit={handleLogin} className={styles.loginForm}>
+            <input
+              type="password"
+              inputMode="numeric"
+              placeholder="Enter PIN"
+              value={pin}
+              onChange={(e) => { setPin(e.target.value); setError(''); }}
+              className={styles.pinInput}
+              autoFocus
+            />
+            {error && <div className={styles.error}>{error}</div>}
+            <button type="submit" className={styles.loginBtn}>Enter</button>
+          </form>
+          <div className={styles.divider}>or</div>
+          <button className={styles.seedBtn} onClick={handleSeed}>
+            🌱 Seed test data
+          </button>
+        </div>
       </div>
     );
   }
