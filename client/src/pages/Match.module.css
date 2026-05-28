@@ -418,7 +418,7 @@
 }
 
 .dotSlot {
-  width: 11px;
+  width: 13px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -471,7 +471,7 @@
   background: var(--yellow);
   border-radius: 50%;
   flex-shrink: 0;
-  margin-left: 3px;
+  margin-left: 5px;
 }
 
 .carrierA {

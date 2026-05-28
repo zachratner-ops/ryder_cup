@@ -244,12 +244,19 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
     const pressStart = nextPressStartHole(holeData, nassauBet.playerA, nassauBet.playerB, startHole, endHole);
     if (pressStart > endHole) return null;
 
-    // Check no active press already exists covering this range
-    const existingPress = Object.values(presses).find(p =>
-      p.nassauBetId === betId &&
-      p.startHole === pressStart &&
-      p.parentPressId === (parentPressId || null)
-    );
+    // Hide button once a press already exists for this context.
+    // For segment-level presses: match on nassauBetId + segment label.
+    // For press-of-press: match on nassauBetId + parentPressId.
+    const existingPress = Object.values(presses).find(p => {
+      if (p.nassauBetId !== betId) return false;
+      if (parentPressId) {
+        // sub-press: is there already a child of this parent?
+        return p.parentPressId === parentPressId;
+      } else {
+        // segment-level: is there already a press for this segment?
+        return p.parentPressId == null && p.segment === segment;
+      }
+    });
     if (existingPress) return null;
 
     const cfg = { nassauBetId: betId, startHole: pressStart, endHole, segment, parentPressId: parentPressId || null };
