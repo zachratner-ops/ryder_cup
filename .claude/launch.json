@@ -4,7 +4,10 @@
     {
       "name": "client",
       "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
-      "runtimeArgs": ["C:\\Users\\ZachRatner\\ryder_cup\\.claude\\worktrees\\strange-volhard-916574\\client\\node_modules\\vite\\bin\\vite.js"],
+      "runtimeArgs": [
+        "C:\\Users\\ZachRatner\\ryder_cup\\.claude\\worktrees\\stupefied-sinoussi-9b4c8e\\client\\node_modules\\vite\\bin\\vite.js",
+        "C:\\Users\\ZachRatner\\ryder_cup\\.claude\\worktrees\\stupefied-sinoussi-9b4c8e\\client"
+      ],
       "port": 5173
     }
   ]
