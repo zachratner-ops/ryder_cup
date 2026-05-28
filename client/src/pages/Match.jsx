@@ -190,12 +190,12 @@ export default function Match({ playerId, isAdmin }) {
     ? (gross > 0 ? gross : null)
     : gross > 0 ? gross - (receiveStroke ? 1 : 0) : null;
 
-  const netVsPar = net != null && hole.par ? net - hole.par : null;
-  const stepperAnnotation = netVsPar == null ? ''
-    : netVsPar <= -2 ? styles.scoreEagle
-    : netVsPar === -1 ? styles.scoreBirdie
-    : netVsPar === 1 ? styles.scoreBogey
-    : netVsPar >= 2 ? styles.scoreDouble
+  const grossVsPar = gross > 0 && hole.par ? gross - hole.par : null;
+  const stepperAnnotation = grossVsPar == null ? ''
+    : grossVsPar <= -2 ? styles.scoreEagle
+    : grossVsPar === -1 ? styles.scoreBirdie
+    : grossVsPar === 1 ? styles.scoreBogey
+    : grossVsPar >= 2 ? styles.scoreDouble
     : '';
 
   // Admin can always enter scores; regular players only when in the match
@@ -453,7 +453,7 @@ export default function Match({ playerId, isAdmin }) {
               {[{ carrierId: carrierAId, score: scoreA }, { carrierId: carrierBId, score: scoreB }].map(({ carrierId, score }, idx) => (
                 <span key={idx} className={styles.scScore}>
                   <span className={styles.dotSlot} />
-                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7 }}>
                     <span className={`${styles.scorePill} ${score?.gross ? styles.ybCarrier : ''} ${ybScoreShape(score?.gross, holePar)}`}>
                       {score?.gross ?? '—'}
                     </span>
