@@ -387,6 +387,36 @@
   background: var(--surface);
 }
 
+.compCheckboxes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.compBtn {
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.compBtnOn {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.customRangeRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .submitBtn {
   background: var(--accent);
   color: white;

@@ -9,7 +9,6 @@ import {
   computeSegmentStatus,
   computePressPayout,
   canPress,
-  segmentRange,
   formatSegmentStatus,
 } from '../nassauCompute';
 
@@ -242,7 +241,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
   }
 
   function renderNassauCard([betId, bet]) {
-    const status = computeNassauStatus(holeData, bet);
+    const componentStatuses = computeNassauStatus(holeData, bet);
     const nameA = betFirstName(players, bet.playerA);
     const nameB = betFirstName(players, bet.playerB);
 
@@ -254,32 +253,30 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
             <span className={styles.nassauVs}>vs</span>
             <span style={{ color: betTeamColor(players, bet.playerB) }}>{nameB}</span>
           </div>
-          <div className={styles.nassauMeta}>${bet.amount}/hole</div>
+          <div className={styles.nassauMeta}>${bet.amount}/comp</div>
         </div>
 
         <div className={styles.nassauSegments}>
-          {(['front', 'back', 'overall']).map((seg) => {
-            const s = status[seg];
-            const { startHole, endHole } = segmentRange(seg);
+          {componentStatuses.map(({ label, startHole, endHole, status: s }) => {
             const statusStr = formatSegmentStatus(s, nameA, nameB, startHole, endHole);
             const decided = s.winner !== 'incomplete';
 
-            // Segment-level presses
+            // Segment-level presses keyed by label
             const segPresses = Object.entries(presses).filter(([, p]) =>
-              p.nassauBetId === betId && p.segment === seg && p.parentPressId == null
+              p.nassauBetId === betId && p.segment === label && p.parentPressId == null
             );
 
             return (
-              <div key={seg}>
+              <div key={label}>
                 <div className={styles.nassauSegRow}>
-                  <span className={styles.nassauSegLabel}>{SEG_LABEL(seg)}</span>
+                  <span className={styles.nassauSegLabel}>{label}</span>
                   <span className={`${styles.nassauSegStatus} ${
                     decided && s.winner !== 'half' ? styles.nassauSegStatusWon :
                     s.holesPlayed === 0 ? styles.nassauSegStatusMuted : ''
                   }`}>
                     {statusStr}
                   </span>
-                  {!decided && renderPressButton(bet, betId, s, startHole, endHole, seg, null)}
+                  {!decided && renderPressButton(bet, betId, s, startHole, endHole, label, null)}
                 </div>
 
                 {/* Segment-level presses */}
@@ -537,7 +534,6 @@ export default function Match({ playerId, isAdmin }) {
   // Side bets data
   const [nassauBets, setNassauBets] = useState({});
   const [customBets, setCustomBets] = useState({});
-  const [betsLoaded, setBetsLoaded] = useState(false);
   const [entry, setEntry] = useState({ gross: '', fairwayHit: null, gir: false, putts: '' });
   const [justSaved, setJustSaved] = useState(false);
   const initialJumped = useRef(false);
@@ -558,14 +554,13 @@ export default function Match({ playerId, isAdmin }) {
     return u;
   }, [match?.roundId]);
 
-  // Lazy-load bets when the Bets tab is first opened
+  // Subscribe to bets when on Bets tab, unsubscribe when leaving
   useEffect(() => {
-    if (matchTab !== 'bets' || betsLoaded) return;
-    setBetsLoaded(true);
+    if (matchTab !== 'bets') return;
     const u1 = onValue(ref(db, 'nassauBets'), (s) => setNassauBets(s.val() || {}));
     const u2 = onValue(ref(db, 'customBets'), (s) => setCustomBets(s.val() || {}));
     return () => { u1(); u2(); };
-  }, [matchTab, betsLoaded]);
+  }, [matchTab]);
 
   // Auto-advance to first unplayed hole on initial load
   useEffect(() => {

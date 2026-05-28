@@ -571,8 +571,7 @@
 }
 
 .matchTabBtn {
-  flex: 1;
-  padding: 8px 14px;
+  padding: 8px 22px;
   border-radius: 20px;
   background: var(--surface2);
   border: 1.5px solid var(--border);
@@ -580,6 +579,7 @@
   font-weight: 600;
   color: var(--text-muted);
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .matchTabActive {

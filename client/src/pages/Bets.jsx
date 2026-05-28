@@ -6,8 +6,8 @@ import {
   computeNassauPayout,
   computeSegmentStatus,
   computePressPayout,
-  segmentRange,
   formatSegmentStatus,
+  DEFAULT_COMPONENTS,
 } from '../nassauCompute';
 import styles from './Bets.module.css';
 
@@ -69,16 +69,17 @@ function PressRows({ presses, nassauBet, holeData, players }) {
 // ── Nassau bet card ──────────────────────────────────────────────────────────
 
 function NassauBetCard({ betId, bet, holeData, players, allPresses }) {
-  const status = computeNassauStatus(holeData, bet);
-  const payout = computeNassauPayout(status, bet);
+  const componentStatuses = computeNassauStatus(holeData, bet);
   const nameA = firstName(players, bet.playerA);
   const nameB = firstName(players, bet.playerB);
 
-  // Collect presses for this bet grouped by segment
-  const pressesBySegment = { front: [], back: [], overall: [] };
+  // Collect presses for this bet grouped by component label
+  const pressesByLabel = {};
   Object.entries(allPresses).forEach(([pid, p]) => {
     if (p.nassauBetId === betId && p.parentPressId == null) {
-      if (pressesBySegment[p.segment]) pressesBySegment[p.segment].push([pid, p]);
+      const key = p.segment || p.label || '';
+      if (!pressesByLabel[key]) pressesByLabel[key] = [];
+      pressesByLabel[key].push([pid, p]);
     }
   });
 
@@ -90,21 +91,19 @@ function NassauBetCard({ betId, bet, holeData, players, allPresses }) {
           <span className={styles.vsText}>vs</span>
           <span style={{ color: teamColor(players, bet.playerB) }}>{nameB}</span>
         </div>
-        <div className={styles.nassauMeta}>${bet.amount}/hole</div>
+        <div className={styles.nassauMeta}>${bet.amount}/comp</div>
       </div>
 
       <div className={styles.nassauSegments}>
-        {(['front', 'back', 'overall']).map((seg) => {
-          const s = status[seg];
-          const { startHole, endHole } = segmentRange(seg);
+        {componentStatuses.map(({ label, startHole, endHole, status: s }) => {
           const statusStr = formatSegmentStatus(s, nameA, nameB, startHole, endHole);
           const decided = s.winner !== 'incomplete';
           const aDelta = decided ? (s.winner === 'playerA' ? bet.amount : s.winner === 'playerB' ? -bet.amount : 0) : null;
 
           return (
-            <div key={seg}>
+            <div key={label}>
               <div className={styles.segRow}>
-                <span className={styles.segLabel}>{SEG_LABELS[seg]}</span>
+                <span className={styles.segLabel}>{label}</span>
                 <span
                   className={`${styles.segStatus} ${
                     decided && s.winner !== 'half' ? styles.segStatusWon :
@@ -123,7 +122,7 @@ function NassauBetCard({ betId, bet, holeData, players, allPresses }) {
                 )}
               </div>
               <PressRows
-                presses={pressesBySegment[seg]}
+                presses={pressesByLabel[label] || []}
                 nassauBet={bet}
                 holeData={holeData}
                 players={players}
@@ -182,6 +181,13 @@ function CreateBetModal({ players, matches, playerId, onClose, onCreated }) {
   const [nassauPlayerA, setNassauPlayerA] = useState(playerId || '');
   const [nassauPlayerB, setNassauPlayerB] = useState('');
   const [nassauAmount, setNassauAmount] = useState('');
+  // Component selection: which of front9/back9/overall are active + optional custom
+  const [compFront, setCompFront] = useState(true);
+  const [compBack, setCompBack] = useState(true);
+  const [compOverall, setCompOverall] = useState(true);
+  const [compCustom, setCompCustom] = useState(false);
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
 
   // Custom form state
   const [customDesc, setCustomDesc] = useState('');
@@ -208,6 +214,18 @@ function CreateBetModal({ players, matches, playerId, onClose, onCreated }) {
       setError('Pick two different players.');
       return;
     }
+    // Build components array from selections
+    const components = [];
+    if (compFront) components.push({ label: 'Front 9', startHole: 1, endHole: 9 });
+    if (compBack) components.push({ label: 'Back 9', startHole: 10, endHole: 18 });
+    if (compOverall) components.push({ label: 'Overall', startHole: 1, endHole: 18 });
+    if (compCustom) {
+      const s = parseInt(customStart), e = parseInt(customEnd);
+      if (!s || !e || s < 1 || e > 18 || s >= e) { setError('Custom range must be valid holes (1–18, start < end).'); return; }
+      components.push({ label: `Holes ${s}–${e}`, startHole: s, endHole: e });
+    }
+    if (components.length === 0) { setError('Select at least one component.'); return; }
+
     setLoading(true);
     setError('');
     try {
@@ -219,6 +237,7 @@ function CreateBetModal({ players, matches, playerId, onClose, onCreated }) {
           playerA: nassauPlayerA,
           playerB: nassauPlayerB,
           amount: parseFloat(nassauAmount),
+          components,
           createdBy: playerId || 'unknown',
         }),
       });
@@ -336,7 +355,45 @@ function CreateBetModal({ players, matches, playerId, onClose, onCreated }) {
             </div>
 
             <div className={styles.formGroup}>
-              <label className={styles.formLabel}>$ Per Component (front/back/overall)</label>
+              <label className={styles.formLabel}>Components</label>
+              <div className={styles.compCheckboxes}>
+                {[
+                  { key: 'front', label: 'Front 9', val: compFront, set: setCompFront },
+                  { key: 'back', label: 'Back 9', val: compBack, set: setCompBack },
+                  { key: 'overall', label: 'Overall', val: compOverall, set: setCompOverall },
+                  { key: 'custom', label: 'Custom', val: compCustom, set: setCompCustom },
+                ].map(({ key, label, val, set }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`${styles.compBtn} ${val ? styles.compBtnOn : ''}`}
+                    onClick={() => set(v => !v)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {compCustom && (
+                <div className={styles.customRangeRow}>
+                  <input
+                    className={styles.formInput}
+                    type="number" min="1" max="17" placeholder="Start hole"
+                    value={customStart} onChange={e => setCustomStart(e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 600, padding: '0 6px' }}>–</span>
+                  <input
+                    className={styles.formInput}
+                    type="number" min="2" max="18" placeholder="End hole"
+                    value={customEnd} onChange={e => setCustomEnd(e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className={styles.formGroup}>
+              <label className={styles.formLabel}>$ Per Component</label>
               <input
                 className={styles.formInput}
                 type="number"

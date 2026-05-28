@@ -8,7 +8,7 @@ const { computeStrokeAllocation } = require('../strokeAllocation');
 // Creates a Nassau bet between two players in a match, computing head-to-head stroke allocation server-side.
 router.post('/nassau', async (req, res) => {
   try {
-    const { matchId, playerA, playerB, amount, createdBy } = req.body;
+    const { matchId, playerA, playerB, amount, createdBy, components } = req.body;
 
     if (!matchId || !playerA || !playerB || amount == null || !createdBy) {
       return res.status(400).json({ error: 'Missing required fields: matchId, playerA, playerB, amount, createdBy' });
@@ -48,12 +48,20 @@ router.post('/nassau', async (req, res) => {
       'singles'
     );
 
+    // Default to all three components if none specified
+    const DEFAULT_COMPONENTS = [
+      { label: 'Front 9', startHole: 1, endHole: 9 },
+      { label: 'Back 9', startHole: 10, endHole: 18 },
+      { label: 'Overall', startHole: 1, endHole: 18 },
+    ];
+
     const newBet = {
       matchId,
       playerA,
       playerB,
       amount: parseFloat(amount),
       strokeAllocation,
+      components: (Array.isArray(components) && components.length) ? components : DEFAULT_COMPONENTS,
       createdBy,
       createdAt: Date.now(),
       status: 'active',

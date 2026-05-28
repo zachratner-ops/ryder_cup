@@ -52,30 +52,35 @@ export function computeSegmentStatus(holeData, bet, startHole, endHole) {
   return { winner, diff, holesPlayed, decided };
 }
 
+export const DEFAULT_COMPONENTS = [
+  { label: 'Front 9', startHole: 1, endHole: 9 },
+  { label: 'Back 9', startHole: 10, endHole: 18 },
+  { label: 'Overall', startHole: 1, endHole: 18 },
+];
+
 /**
- * Compute all three Nassau segments for a bet.
- * @returns {{ front: SegmentStatus, back: SegmentStatus, overall: SegmentStatus }}
+ * Compute status for each of a bet's components.
+ * Returns an array of { label, startHole, endHole, status }.
+ * Falls back to DEFAULT_COMPONENTS if bet.components is not set (backward compat).
  */
 export function computeNassauStatus(holeData, bet) {
-  return {
-    front: computeSegmentStatus(holeData, bet, 1, 9),
-    back: computeSegmentStatus(holeData, bet, 10, 18),
-    overall: computeSegmentStatus(holeData, bet, 1, 18),
-  };
+  const components = bet.components?.length ? bet.components : DEFAULT_COMPONENTS;
+  return components.map(comp => ({
+    ...comp,
+    status: computeSegmentStatus(holeData, bet, comp.startHole, comp.endHole),
+  }));
 }
 
 /**
- * Compute dollar payout for a Nassau status object.
- * Only includes settled/decided segments.
+ * Compute dollar payout from the result of computeNassauStatus.
  * Returns { [playerA_id]: delta, [playerB_id]: -delta }
  */
-export function computeNassauPayout(status, bet) {
+export function computeNassauPayout(componentStatuses, bet) {
   const { playerA, playerB, amount } = bet;
   let aTotal = 0;
-  for (const seg of [status.front, status.back, status.overall]) {
-    if (seg.winner === 'playerA') aTotal += amount;
-    else if (seg.winner === 'playerB') aTotal -= amount;
-    // 'half' or 'incomplete' = 0
+  for (const { status } of componentStatuses) {
+    if (status.winner === 'playerA') aTotal += amount;
+    else if (status.winner === 'playerB') aTotal -= amount;
   }
   return { [playerA]: aTotal, [playerB]: -aTotal };
 }
