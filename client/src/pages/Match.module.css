@@ -674,21 +674,10 @@
   border-left-color: var(--accent);
 }
 
-.nassauSegBlockWon {
-  background: color-mix(in srgb, var(--green) 9%, var(--surface2));
-  border-color: color-mix(in srgb, var(--green) 28%, var(--border));
-  border-left-color: var(--green);
-}
-
-.nassauSegBlockLost {
-  background: color-mix(in srgb, #dc2626 6%, var(--surface2));
-  border-color: color-mix(in srgb, #dc2626 22%, var(--border));
-  border-left-color: #dc2626;
-}
-
-.nassauSegBlockHalf {
-  border-left-color: var(--text-muted);
-}
+/* Won/lost/half no longer tint the block — all segments same neutral colour */
+.nassauSegBlockWon {}
+.nassauSegBlockLost {}
+.nassauSegBlockHalf {}
 
 .nassauSegBlockHeader {
   display: flex;
@@ -721,6 +710,34 @@
   font-weight: 500;
 }
 
+/* ── Stacked payout lines (winner + loser) ───────────── */
+
+.nassauSegPayoutLines {
+  margin-top: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nassauSegPayoutWinner {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--green);
+}
+
+.nassauSegPayoutLoser {
+  font-size: 13px;
+  font-weight: 700;
+  color: #dc2626;
+}
+
+.nassauSegPayoutHalved {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-top: 5px;
+}
+
 .nassauSegRow {
   display: flex;
   align-items: center;
@@ -747,12 +764,12 @@
   border-left: 2px solid var(--border);
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
 }
 
 .pressRow {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 4px;
 }
 
@@ -762,6 +779,7 @@
   color: var(--text-muted);
   width: 80px;
   flex-shrink: 0;
+  padding-top: 1px;
 }
 
 .pressStatus {
@@ -769,6 +787,38 @@
   font-weight: 500;
   color: var(--text);
   flex: 1;
+}
+
+.pressStatusDecided {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.pressPayout {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+  min-width: 70px;
+}
+
+.pressPayoutWinner {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+}
+
+.pressPayoutLoser {
+  font-size: 12px;
+  font-weight: 700;
+  color: #dc2626;
+}
+
+.pressPayoutHalved {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
 .pressPressBtn {

@@ -278,19 +278,38 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
     );
     // For segment-level presses (parentPressId = null), they're rendered by renderNassauSegments
     if (childPresses.length === 0) return null;
+    const nameA = betFirstName(players, nassauBet.playerA);
+    const nameB = betFirstName(players, nassauBet.playerB);
     return (
       <div className={styles.pressRows}>
         {childPresses.map(([pressId, press]) => {
           const segStatus = computeSegmentStatus(holeData, nassauBet, press.startHole, press.endHole);
-          const nameA = betFirstName(players, nassauBet.playerA);
-          const nameB = betFirstName(players, nassauBet.playerB);
+          const pressDecided = segStatus.winner !== 'incomplete';
           const statusStr = formatSegmentStatus(segStatus, nameA, nameB, press.startHole, press.endHole);
+          const pressWinnerPid = segStatus.winner === 'playerA' ? nassauBet.playerA : segStatus.winner === 'playerB' ? nassauBet.playerB : null;
+          const pressLoserPid = segStatus.winner === 'playerA' ? nassauBet.playerB : segStatus.winner === 'playerB' ? nassauBet.playerA : null;
+          const pressWinnerName = pressWinnerPid ? betFirstName(players, pressWinnerPid) : null;
+          const pressLoserName = pressLoserPid ? betFirstName(players, pressLoserPid) : null;
           return (
             <div key={pressId}>
               <div className={styles.pressRow}>
                 <span className={styles.pressLabel}>Press {press.startHole}–{press.endHole}</span>
-                <span className={styles.pressStatus}>{statusStr}</span>
-                {renderPressButton(nassauBet, betId, segStatus, press.startHole, press.endHole, null, pressId)}
+                <span className={`${styles.pressStatus} ${pressDecided && segStatus.winner !== 'half' ? styles.pressStatusDecided : ''}`}>
+                  {statusStr}
+                </span>
+                {!pressDecided && renderPressButton(nassauBet, betId, segStatus, press.startHole, press.endHole, null, pressId)}
+                {pressDecided && (
+                  <div className={styles.pressPayout}>
+                    {segStatus.winner === 'half' ? (
+                      <span className={styles.pressPayoutHalved}>Halved</span>
+                    ) : (
+                      <>
+                        <span className={styles.pressPayoutWinner}>{pressWinnerName} +${nassauBet.amount}</span>
+                        <span className={styles.pressPayoutLoser}>{pressLoserName} -${nassauBet.amount}</span>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
               {renderPressRows(nassauBet, betId, pressId)}
             </div>
@@ -326,30 +345,22 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
               p.nassauBetId === betId && p.segment === label && p.parentPressId == null
             );
 
-            // Pick block accent class
-            const blockMod = decided
-              ? (s.winner === 'half' ? styles.nassauSegBlockHalf
-                : s.winner === 'playerA' ? styles.nassauSegBlockWon
-                : styles.nassauSegBlockLost)
-              : s.holesPlayed > 0 ? styles.nassauSegBlockInProgress : '';
+            // Block: only accent left-bar while in progress; no tinting when decided
+            const blockMod = !decided && s.holesPlayed > 0 ? styles.nassauSegBlockInProgress : '';
 
-            // For a viewer who is playerB, wins/losses are flipped
-            const isPlayerA = bet.playerA === playerId;
-            const viewerWon = decided && s.winner !== 'half' && (
-              (isPlayerA && s.winner === 'playerA') || (!isPlayerA && s.winner === 'playerB')
-            );
-            const payoutColor = s.winner === 'half' ? 'var(--text-muted)'
-              : viewerWon ? 'var(--green)' : '#dc2626';
+            const winnerPlayerId =
+              s.winner === 'playerA' ? bet.playerA :
+              s.winner === 'playerB' ? bet.playerB : null;
+            const loserPlayerId =
+              s.winner === 'playerA' ? bet.playerB :
+              s.winner === 'playerB' ? bet.playerA : null;
+            const winnerName = winnerPlayerId ? betFirstName(players, winnerPlayerId) : null;
+            const loserName = loserPlayerId ? betFirstName(players, loserPlayerId) : null;
 
             return (
               <div key={label} className={`${styles.nassauSegBlock} ${blockMod}`}>
                 <div className={styles.nassauSegBlockHeader}>
                   <span className={styles.nassauSegLabel}>{label}</span>
-                  {decided && (
-                    <span style={{ fontSize: 13, fontWeight: 700, color: payoutColor }}>
-                      {s.winner === 'half' ? 'Halved' : (viewerWon ? `+$${bet.amount}` : `-$${bet.amount}`)}
-                    </span>
-                  )}
                 </div>
                 <div className={styles.nassauSegRow}>
                   <span className={`${styles.nassauSegStatus} ${
@@ -361,18 +372,47 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
                   {!decided && renderPressButton(bet, betId, s, startHole, endHole, label, null)}
                 </div>
 
+                {decided && s.winner !== 'half' && (
+                  <div className={styles.nassauSegPayoutLines}>
+                    <span className={styles.nassauSegPayoutWinner}>{winnerName} +${bet.amount}</span>
+                    <span className={styles.nassauSegPayoutLoser}>{loserName} -${bet.amount}</span>
+                  </div>
+                )}
+                {decided && s.winner === 'half' && (
+                  <span className={styles.nassauSegPayoutHalved}>Halved — no money</span>
+                )}
+
                 {/* Segment-level presses */}
                 {segPresses.length > 0 && (
                   <div className={styles.pressRows}>
                     {segPresses.map(([pressId, press]) => {
                       const pressStatus = computeSegmentStatus(holeData, bet, press.startHole, press.endHole);
+                      const pressDecided = pressStatus.winner !== 'incomplete';
                       const pressStatusStr = formatSegmentStatus(pressStatus, nameA, nameB, press.startHole, press.endHole);
+                      const pressWinnerPid = pressStatus.winner === 'playerA' ? bet.playerA : pressStatus.winner === 'playerB' ? bet.playerB : null;
+                      const pressLoserPid = pressStatus.winner === 'playerA' ? bet.playerB : pressStatus.winner === 'playerB' ? bet.playerA : null;
+                      const pressWinnerName = pressWinnerPid ? betFirstName(players, pressWinnerPid) : null;
+                      const pressLoserName = pressLoserPid ? betFirstName(players, pressLoserPid) : null;
                       return (
                         <div key={pressId}>
                           <div className={styles.pressRow}>
                             <span className={styles.pressLabel}>Press {press.startHole}–{press.endHole}</span>
-                            <span className={styles.pressStatus}>{pressStatusStr}</span>
-                            {!pressStatus.decided && renderPressButton(bet, betId, pressStatus, press.startHole, press.endHole, null, pressId)}
+                            <span className={`${styles.pressStatus} ${pressDecided && pressStatus.winner !== 'half' ? styles.pressStatusDecided : ''}`}>
+                              {pressStatusStr}
+                            </span>
+                            {!pressDecided && renderPressButton(bet, betId, pressStatus, press.startHole, press.endHole, null, pressId)}
+                            {pressDecided && (
+                              <div className={styles.pressPayout}>
+                                {pressStatus.winner === 'half' ? (
+                                  <span className={styles.pressPayoutHalved}>Halved</span>
+                                ) : (
+                                  <>
+                                    <span className={styles.pressPayoutWinner}>{pressWinnerName} +${bet.amount}</span>
+                                    <span className={styles.pressPayoutLoser}>{pressLoserName} -${bet.amount}</span>
+                                  </>
+                                )}
+                              </div>
+                            )}
                           </div>
                           {renderPressRows(bet, betId, pressId)}
                         </div>
