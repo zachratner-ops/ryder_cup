@@ -563,6 +563,302 @@
 
 .bottomPad { height: 20px; }
 
+/* Scorecard / Bets page-level tabs */
+.matchTabs {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.matchTabBtn {
+  flex: 1;
+  padding: 8px 14px;
+  border-radius: 20px;
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.matchTabActive {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-weight: 700;
+}
+
+/* ── MatchBetsTab ─── */
+
+.betsTab {
+  padding-bottom: 20px;
+}
+
+.betsTabEmpty {
+  text-align: center;
+  padding: 24px 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.addBetBtn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 9px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(78, 42, 132, 0.25);
+}
+
+.nassauCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+.nassauCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.nassauPlayers {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nassauVs {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.nassauMeta {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.nassauSegments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nassauSegRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nassauSegLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  width: 64px;
+  flex-shrink: 0;
+}
+
+.nassauSegStatus {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+}
+
+.nassauSegStatusWon {
+  color: var(--green);
+}
+
+.nassauSegStatusMuted {
+  color: var(--text-muted);
+}
+
+.nassauPressBtn {
+  background: transparent;
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  border-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.pressRows {
+  margin-top: 4px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pressRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pressLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.pressStatus {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  flex: 1;
+}
+
+.pressPressBtn {
+  background: transparent;
+  border: 1.5px solid var(--accent);
+  border-radius: 20px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.pressConfirm {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pressConfirmText {
+  font-weight: 600;
+  flex: 1;
+}
+
+.pressConfirmBtns {
+  display: flex;
+  gap: 8px;
+}
+
+.pressConfirmYes {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pressConfirmNo {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.customBetCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+.customBetHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.customBetDesc {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.customBetAmount {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.customBetFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.customBetPlayers {
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.betStatusOpen {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.betStatusSettled {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--green) 15%, transparent);
+  color: var(--green);
+}
+
+.betSettleBtn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
 .resultBanner {
   background: var(--surface);
   border: 1px solid var(--border);

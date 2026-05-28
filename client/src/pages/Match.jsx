@@ -1,9 +1,502 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ref, onValue, set, update } from 'firebase/database';
+import { ref, onValue, set, update, push } from 'firebase/database';
 import { db } from '../firebase';
 import TeamLogo from '../components/TeamLogo';
 import styles from './Match.module.css';
+import {
+  computeNassauStatus,
+  computeSegmentStatus,
+  computePressPayout,
+  canPress,
+  segmentRange,
+  formatSegmentStatus,
+} from '../nassauCompute';
+
+// ── helpers shared by MatchBetsTab ──────────────────────────────────────────
+
+function betFirstName(players, id) {
+  return players[id]?.name?.split(' ')[0] || id;
+}
+
+function betTeamColor(players, id) {
+  return players[id]?.teamId === 'teamA' ? 'var(--teamA)' : 'var(--teamB)';
+}
+
+function SEG_LABEL(seg) {
+  return seg === 'front' ? 'Front 9' : seg === 'back' ? 'Back 9' : 'Overall';
+}
+
+/** First unplayed hole within [startHole, endHole] for both playerA and playerB */
+function nextPressStartHole(holeData, playerA, playerB, startHole, endHole) {
+  for (let h = startHole; h <= endHole; h++) {
+    const grossA = holeData?.[h]?.[playerA]?.gross;
+    const grossB = holeData?.[h]?.[playerB]?.gross;
+    if (grossA == null || grossB == null) return h;
+  }
+  return endHole + 1; // all played, no room to press
+}
+
+// ── MatchBetsTab component ───────────────────────────────────────────────────
+
+function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allPlayerIds, playerId, isAdmin }) {
+  const [presses, setPresses] = useState({});
+  const [confirmPress, setConfirmPress] = useState(null); // { nassauBetId, segment, pressId?, startHole, endHole, amount }
+  const [showCreate, setShowCreate] = useState(false);
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState('');
+
+  // Nassau create form (pre-filled to this match)
+  const [newOpponent, setNewOpponent] = useState('');
+  const [newAmount, setNewAmount] = useState('');
+
+  // Custom create form
+  const [createTab, setCreateTab] = useState('nassau');
+  const [customDesc, setCustomDesc] = useState('');
+  const [customPlayerA, setCustomPlayerA] = useState(playerId || '');
+  const [customPlayerB, setCustomPlayerB] = useState('');
+  const [customAmount, setCustomAmount] = useState('');
+
+  useEffect(() => {
+    const u = onValue(ref(db, 'presses'), (s) => setPresses(s.val() || {}));
+    return u;
+  }, []);
+
+  // Nassau bets tied to this match
+  const matchNassauBets = useMemo(() =>
+    Object.entries(nassauBets).filter(([, b]) => b.matchId === matchId),
+    [nassauBets, matchId]
+  );
+
+  // Custom bets where both players are in this match
+  const matchCustomBets = useMemo(() =>
+    Object.entries(customBets).filter(([, b]) =>
+      allPlayerIds.includes(b.playerA) && allPlayerIds.includes(b.playerB)
+    ),
+    [customBets, allPlayerIds]
+  );
+
+  const betCount = matchNassauBets.length + matchCustomBets.length;
+
+  async function handleCreateNassau() {
+    const myId = isAdmin ? null : playerId;
+    if (!myId && !isAdmin) { setCreateError('Select your player first.'); return; }
+    if (!newOpponent || !newAmount) { setCreateError('Fill in all fields.'); return; }
+    if (newOpponent === myId) { setCreateError('Pick a different opponent.'); return; }
+
+    setCreateLoading(true);
+    setCreateError('');
+    try {
+      const res = await fetch('/api/bets/nassau', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          matchId,
+          playerA: myId || allPlayerIds[0],
+          playerB: newOpponent,
+          amount: parseFloat(newAmount),
+          createdBy: myId || 'admin',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      setShowCreate(false);
+      setNewOpponent('');
+      setNewAmount('');
+    } catch (e) {
+      setCreateError(e.message);
+    } finally {
+      setCreateLoading(false);
+    }
+  }
+
+  async function handleCreateCustom() {
+    if (!customDesc.trim() || !customPlayerA || !customPlayerB || !customAmount) {
+      setCreateError('Fill in all fields.');
+      return;
+    }
+    setCreateLoading(true);
+    setCreateError('');
+    try {
+      await push(ref(db, 'customBets'), {
+        description: customDesc.trim(),
+        playerA: customPlayerA,
+        playerB: customPlayerB,
+        amount: parseFloat(customAmount),
+        winner: null,
+        createdBy: playerId || 'unknown',
+        createdAt: Date.now(),
+        status: 'open',
+        settledBy: null,
+        settledAt: null,
+      });
+      setShowCreate(false);
+      setCustomDesc('');
+      setCustomPlayerA(playerId || '');
+      setCustomPlayerB('');
+      setCustomAmount('');
+    } catch (e) {
+      setCreateError(e.message);
+    } finally {
+      setCreateLoading(false);
+    }
+  }
+
+  async function handleSettle(betId) {
+    // Simple settle — just mark as halved/admin settles; full settle goes through Bets page
+    // On mobile we just prompt which player won
+    const bet = customBets[betId];
+    if (!bet) return;
+    // Use native prompt for simplicity — full settle UI is on Bets page
+    const choice = window.prompt(
+      `Settle "${bet.description}"\n1 = ${betFirstName(players, bet.playerA)} wins\n2 = ${betFirstName(players, bet.playerB)} wins\n3 = Halved`
+    );
+    const winner = choice === '1' ? bet.playerA : choice === '2' ? bet.playerB : choice === '3' ? 'half' : null;
+    if (!winner) return;
+    await update(ref(db, `customBets/${betId}`), {
+      winner,
+      status: 'settled',
+      settledBy: playerId || 'unknown',
+      settledAt: Date.now(),
+    });
+  }
+
+  async function handlePress(cfg) {
+    // cfg: { nassauBetId, startHole, endHole, parentPressId, segment }
+    try {
+      await push(ref(db, 'presses'), {
+        nassauBetId: cfg.nassauBetId,
+        parentPressId: cfg.parentPressId || null,
+        segment: cfg.segment || null,
+        startHole: cfg.startHole,
+        endHole: cfg.endHole,
+        presserPlayerId: playerId || 'unknown',
+        status: 'active',
+        createdAt: Date.now(),
+      });
+    } catch (e) {
+      console.error('Press failed:', e);
+    }
+    setConfirmPress(null);
+  }
+
+  // Render a press button for a segment (or a press-of-press)
+  function renderPressButton(nassauBet, betId, segStatus, startHole, endHole, segment, parentPressId) {
+    if (!playerId) return null; // spectator can't press
+    const isPlayerA = nassauBet.playerA === playerId;
+    const isPlayerB = nassauBet.playerB === playerId;
+    if (!isPlayerA && !isPlayerB) return null;
+
+    if (!canPress(segStatus, isPlayerA, startHole, endHole)) return null;
+
+    const pressStart = nextPressStartHole(holeData, nassauBet.playerA, nassauBet.playerB, startHole, endHole);
+    if (pressStart > endHole) return null;
+
+    // Check no active press already exists covering this range
+    const existingPress = Object.values(presses).find(p =>
+      p.nassauBetId === betId &&
+      p.startHole === pressStart &&
+      p.parentPressId === (parentPressId || null)
+    );
+    if (existingPress) return null;
+
+    const cfg = { nassauBetId: betId, startHole: pressStart, endHole, segment, parentPressId: parentPressId || null };
+
+    return (
+      <button
+        className={parentPressId ? styles.pressPressBtn : styles.nassauPressBtn}
+        onClick={() => setConfirmPress(cfg)}
+      >
+        Press
+      </button>
+    );
+  }
+
+  // Recursively render press rows (and their sub-presses)
+  function renderPressRows(nassauBet, betId, parentPressId) {
+    const childPresses = Object.entries(presses).filter(([, p]) =>
+      p.nassauBetId === betId && p.parentPressId === (parentPressId || null) && p.parentPressId !== null
+    );
+    // For segment-level presses (parentPressId = null), they're rendered by renderNassauSegments
+    if (childPresses.length === 0) return null;
+    return (
+      <div className={styles.pressRows}>
+        {childPresses.map(([pressId, press]) => {
+          const segStatus = computeSegmentStatus(holeData, nassauBet, press.startHole, press.endHole);
+          const nameA = betFirstName(players, nassauBet.playerA);
+          const nameB = betFirstName(players, nassauBet.playerB);
+          const statusStr = formatSegmentStatus(segStatus, nameA, nameB, press.startHole, press.endHole);
+          return (
+            <div key={pressId}>
+              <div className={styles.pressRow}>
+                <span className={styles.pressLabel}>Press {press.startHole}–{press.endHole}</span>
+                <span className={styles.pressStatus}>{statusStr}</span>
+                {renderPressButton(nassauBet, betId, segStatus, press.startHole, press.endHole, null, pressId)}
+              </div>
+              {renderPressRows(nassauBet, betId, pressId)}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  function renderNassauCard([betId, bet]) {
+    const status = computeNassauStatus(holeData, bet);
+    const nameA = betFirstName(players, bet.playerA);
+    const nameB = betFirstName(players, bet.playerB);
+
+    return (
+      <div key={betId} className={styles.nassauCard}>
+        <div className={styles.nassauCardHeader}>
+          <div className={styles.nassauPlayers}>
+            <span style={{ color: betTeamColor(players, bet.playerA) }}>{nameA}</span>
+            <span className={styles.nassauVs}>vs</span>
+            <span style={{ color: betTeamColor(players, bet.playerB) }}>{nameB}</span>
+          </div>
+          <div className={styles.nassauMeta}>${bet.amount}/hole</div>
+        </div>
+
+        <div className={styles.nassauSegments}>
+          {(['front', 'back', 'overall']).map((seg) => {
+            const s = status[seg];
+            const { startHole, endHole } = segmentRange(seg);
+            const statusStr = formatSegmentStatus(s, nameA, nameB, startHole, endHole);
+            const decided = s.winner !== 'incomplete';
+
+            // Segment-level presses
+            const segPresses = Object.entries(presses).filter(([, p]) =>
+              p.nassauBetId === betId && p.segment === seg && p.parentPressId == null
+            );
+
+            return (
+              <div key={seg}>
+                <div className={styles.nassauSegRow}>
+                  <span className={styles.nassauSegLabel}>{SEG_LABEL(seg)}</span>
+                  <span className={`${styles.nassauSegStatus} ${
+                    decided && s.winner !== 'half' ? styles.nassauSegStatusWon :
+                    s.holesPlayed === 0 ? styles.nassauSegStatusMuted : ''
+                  }`}>
+                    {statusStr}
+                  </span>
+                  {!decided && renderPressButton(bet, betId, s, startHole, endHole, seg, null)}
+                </div>
+
+                {/* Segment-level presses */}
+                {segPresses.length > 0 && (
+                  <div className={styles.pressRows}>
+                    {segPresses.map(([pressId, press]) => {
+                      const pressStatus = computeSegmentStatus(holeData, bet, press.startHole, press.endHole);
+                      const pressStatusStr = formatSegmentStatus(pressStatus, nameA, nameB, press.startHole, press.endHole);
+                      return (
+                        <div key={pressId}>
+                          <div className={styles.pressRow}>
+                            <span className={styles.pressLabel}>Press {press.startHole}–{press.endHole}</span>
+                            <span className={styles.pressStatus}>{pressStatusStr}</span>
+                            {!pressStatus.decided && renderPressButton(bet, betId, pressStatus, press.startHole, press.endHole, null, pressId)}
+                          </div>
+                          {renderPressRows(bet, betId, pressId)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  const matchPlayerOptions = allPlayerIds.filter(id => id !== (isAdmin ? null : playerId));
+
+  return (
+    <div className={styles.betsTab}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div className={styles.sectionLabel} style={{ marginBottom: 0 }}>Bets in this match</div>
+        <button className={styles.addBetBtn} onClick={() => { setShowCreate(true); setCreateError(''); }}>+ Add Bet</button>
+      </div>
+
+      {betCount === 0 && !showCreate && (
+        <div className={styles.betsTabEmpty}>No bets yet — tap Add Bet to start one</div>
+      )}
+
+      {/* Nassau bets */}
+      {matchNassauBets.map(renderNassauCard)}
+
+      {/* Custom bets */}
+      {matchCustomBets.map(([betId, bet]) => (
+        <div key={betId} className={styles.customBetCard}>
+          <div className={styles.customBetHeader}>
+            <span className={styles.customBetDesc}>{bet.description}</span>
+            <span className={styles.customBetAmount}>${bet.amount}</span>
+          </div>
+          <div className={styles.customBetFooter}>
+            <span className={styles.customBetPlayers}>
+              <span style={{ color: betTeamColor(players, bet.playerA), fontWeight: 700 }}>{betFirstName(players, bet.playerA)}</span>
+              <span style={{ color: 'var(--text-muted)' }}> vs </span>
+              <span style={{ color: betTeamColor(players, bet.playerB), fontWeight: 700 }}>{betFirstName(players, bet.playerB)}</span>
+            </span>
+            {bet.status === 'settled' ? (
+              <span className={styles.betStatusSettled}>
+                {bet.winner === 'half' ? 'Halved' : `${betFirstName(players, bet.winner)} wins`}
+              </span>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className={styles.betStatusOpen}>Open</span>
+                <button className={styles.betSettleBtn} onClick={() => handleSettle(betId)}>Settle</button>
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {/* Press confirm overlay */}
+      {confirmPress && (
+        <div className={styles.pressConfirm}>
+          <span className={styles.pressConfirmText}>
+            Press holes {confirmPress.startHole}–{confirmPress.endHole} · ${nassauBets[confirmPress.nassauBetId]?.amount}?
+          </span>
+          <div className={styles.pressConfirmBtns}>
+            <button className={styles.pressConfirmYes} onClick={() => handlePress(confirmPress)}>Yes</button>
+            <button className={styles.pressConfirmNo} onClick={() => setConfirmPress(null)}>No</button>
+          </div>
+        </div>
+      )}
+
+      {/* Create bet sheet */}
+      {showCreate && (
+        <div style={{ marginTop: 16 }}>
+          <div className={styles.ybTabs} style={{ marginBottom: 14 }}>
+            <button
+              className={`${styles.ybTabBtn} ${createTab === 'nassau' ? styles.ybTabActive : ''}`}
+              style={createTab === 'nassau' ? { color: 'var(--accent)', borderColor: 'var(--accent)' } : {}}
+              onClick={() => { setCreateTab('nassau'); setCreateError(''); }}
+            >
+              Nassau
+            </button>
+            <button
+              className={`${styles.ybTabBtn} ${createTab === 'custom' ? styles.ybTabActive : ''}`}
+              style={createTab === 'custom' ? { color: 'var(--accent)', borderColor: 'var(--accent)' } : {}}
+              onClick={() => { setCreateTab('custom'); setCreateError(''); }}
+            >
+              Custom
+            </button>
+          </div>
+
+          {createTab === 'nassau' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <div className={styles.sectionLabel}>Opponent</div>
+                <select
+                  style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '11px 14px', fontSize: 15, width: '100%', color: 'var(--text)' }}
+                  value={newOpponent}
+                  onChange={(e) => setNewOpponent(e.target.value)}
+                >
+                  <option value="">Select opponent…</option>
+                  {matchPlayerOptions.filter(id => id !== playerId).map(id => (
+                    <option key={id} value={id}>{players[id]?.name || id}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <div className={styles.sectionLabel}>$ Per Component (front/back/overall)</div>
+                <input
+                  style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '11px 14px', fontSize: 15, width: '100%', color: 'var(--text)', boxSizing: 'border-box' }}
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="e.g. 5"
+                  value={newAmount}
+                  onChange={(e) => setNewAmount(e.target.value)}
+                />
+              </div>
+              {createError && <p style={{ color: '#dc2626', fontSize: 14, margin: 0 }}>{createError}</p>}
+              <button
+                style={{ background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 12, padding: 15, fontSize: 16, fontWeight: 700, cursor: 'pointer', opacity: createLoading ? 0.5 : 1 }}
+                onClick={handleCreateNassau}
+                disabled={createLoading}
+              >
+                {createLoading ? 'Creating…' : 'Create Nassau Bet'}
+              </button>
+            </div>
+          )}
+
+          {createTab === 'custom' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <div className={styles.sectionLabel}>Description</div>
+                <input
+                  style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '11px 14px', fontSize: 15, width: '100%', color: 'var(--text)', boxSizing: 'border-box' }}
+                  type="text"
+                  placeholder="e.g. First birdie of the day"
+                  value={customDesc}
+                  onChange={(e) => setCustomDesc(e.target.value)}
+                />
+              </div>
+              <div>
+                <div className={styles.sectionLabel}>Player A</div>
+                <select
+                  style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '11px 14px', fontSize: 15, width: '100%', color: 'var(--text)' }}
+                  value={customPlayerA}
+                  onChange={(e) => setCustomPlayerA(e.target.value)}
+                >
+                  <option value="">Select…</option>
+                  {allPlayerIds.filter(id => id !== customPlayerB).map(id => (
+                    <option key={id} value={id}>{players[id]?.name || id}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <div className={styles.sectionLabel}>Player B</div>
+                <select
+                  style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '11px 14px', fontSize: 15, width: '100%', color: 'var(--text)' }}
+                  value={customPlayerB}
+                  onChange={(e) => setCustomPlayerB(e.target.value)}
+                >
+                  <option value="">Select…</option>
+                  {allPlayerIds.filter(id => id !== customPlayerA).map(id => (
+                    <option key={id} value={id}>{players[id]?.name || id}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <div className={styles.sectionLabel}>$ Amount</div>
+                <input
+                  style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '11px 14px', fontSize: 15, width: '100%', color: 'var(--text)', boxSizing: 'border-box' }}
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="e.g. 10"
+                  value={customAmount}
+                  onChange={(e) => setCustomAmount(e.target.value)}
+                />
+              </div>
+              {createError && <p style={{ color: '#dc2626', fontSize: 14, margin: 0 }}>{createError}</p>}
+              <button
+                style={{ background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 12, padding: 15, fontSize: 16, fontWeight: 700, cursor: 'pointer', opacity: createLoading ? 0.5 : 1 }}
+                onClick={handleCreateCustom}
+                disabled={createLoading}
+              >
+                {createLoading ? 'Creating…' : 'Create Custom Bet'}
+              </button>
+            </div>
+          )}
+
+          <button
+            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 15, fontWeight: 600, width: '100%', padding: 12, cursor: 'pointer', marginTop: 4 }}
+            onClick={() => { setShowCreate(false); setCreateError(''); }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main match computations ──────────────────────────────────────────────────
 
 function computeMatchStatus(holeResults, teamAIds, teamBIds) {
   let diff = 0;
@@ -39,6 +532,12 @@ export default function Match({ playerId, isAdmin }) {
   const [entryForId, setEntryForId] = useState(null);
   // Yellow ball scorecard tab: 'teamA' | 'teamB' | 'score'
   const [ybTab, setYbTab] = useState(null); // null = derive from player's team
+  // Page-level tab: 'scorecard' | 'bets'
+  const [matchTab, setMatchTab] = useState('scorecard');
+  // Side bets data
+  const [nassauBets, setNassauBets] = useState({});
+  const [customBets, setCustomBets] = useState({});
+  const [betsLoaded, setBetsLoaded] = useState(false);
   const [entry, setEntry] = useState({ gross: '', fairwayHit: null, gir: false, putts: '' });
   const [justSaved, setJustSaved] = useState(false);
   const initialJumped = useRef(false);
@@ -58,6 +557,15 @@ export default function Match({ playerId, isAdmin }) {
     const u = onValue(ref(db, `rounds/${match.roundId}`), (s) => setRound(s.val()));
     return u;
   }, [match?.roundId]);
+
+  // Lazy-load bets when the Bets tab is first opened
+  useEffect(() => {
+    if (matchTab !== 'bets' || betsLoaded) return;
+    setBetsLoaded(true);
+    const u1 = onValue(ref(db, 'nassauBets'), (s) => setNassauBets(s.val() || {}));
+    const u2 = onValue(ref(db, 'customBets'), (s) => setCustomBets(s.val() || {}));
+    return () => { u1(); u2(); };
+  }, [matchTab, betsLoaded]);
 
   // Auto-advance to first unplayed hole on initial load
   useEffect(() => {
@@ -768,7 +1276,37 @@ export default function Match({ playerId, isAdmin }) {
         </div>
       )}
 
+      {/* Scorecard / Bets page-level tab switcher */}
+      <div className={styles.matchTabs}>
+        <button
+          className={`${styles.matchTabBtn} ${matchTab === 'scorecard' ? styles.matchTabActive : ''}`}
+          onClick={() => setMatchTab('scorecard')}
+        >
+          Scorecard
+        </button>
+        <button
+          className={`${styles.matchTabBtn} ${matchTab === 'bets' ? styles.matchTabActive : ''}`}
+          onClick={() => setMatchTab('bets')}
+        >
+          💰 Bets
+        </button>
+      </div>
+
+      {matchTab === 'bets' && (
+        <MatchBetsTab
+          matchId={matchId}
+          holeData={holeData}
+          players={players}
+          nassauBets={nassauBets}
+          customBets={customBets}
+          allPlayerIds={allPlayerIds}
+          playerId={playerId}
+          isAdmin={isAdmin}
+        />
+      )}
+
       {/* Scorecard */}
+      {matchTab === 'scorecard' && (
       <div className={styles.scorecard}>
         <div className={styles.sectionLabel}>Scorecard</div>
 
@@ -918,6 +1456,7 @@ export default function Match({ playerId, isAdmin }) {
           </div>
         )}
       </div>
+      )}
 
       <div className={styles.bottomPad} />
     </div>
