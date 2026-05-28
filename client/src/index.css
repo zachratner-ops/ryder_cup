@@ -33,6 +33,7 @@ html, body {
   max-width: 480px;
   margin: 0 auto;
   min-height: 100dvh;
+  padding-top: env(safe-area-inset-top);
 }
 
 button {
