@@ -46,9 +46,9 @@ function getBetWinnerIds(bet) {
   return null;
 }
 
-// ── Press rows (nested under a Nassau segment row) ───────────────────────────
+// ── Press rows (nested under a Nassau segment row, recursive for sub-presses) ──
 
-function PressRows({ presses, nassauBet, holeData, players }) {
+function PressRows({ presses, nassauBet, nassauBetId, holeData, players, allPresses }) {
   if (!presses.length) return null;
   return (
     <div className={styles.pressRows}>
@@ -63,17 +63,36 @@ function PressRows({ presses, nassauBet, holeData, players }) {
         const nameB = firstName(players, nassauBet.playerB);
         const statusStr = formatSegmentStatus(status, nameA, nameB, startHole, endHole);
 
+        // Find any sub-presses whose parent is this press
+        const childPresses = allPresses
+          ? Object.entries(allPresses).filter(
+              ([, p]) => p.nassauBetId === nassauBetId && p.parentPressId === pressId
+            )
+          : [];
+
         return (
-          <div key={pressId} className={styles.pressRow}>
-            <span className={styles.pressLabel}>{label}</span>
-            <span className={styles.pressStatus}>{statusStr}</span>
-            {status.winner !== 'incomplete' && (
-              <span
-                className={styles.pressPayout}
-                style={{ color: aDelta > 0 ? 'var(--green)' : aDelta < 0 ? '#dc2626' : 'var(--text-muted)' }}
-              >
-                {status.winner === 'half' ? 'Halved' : `${fmtMoney(Math.abs(nassauBet.amount))}`}
-              </span>
+          <div key={pressId}>
+            <div className={styles.pressRow}>
+              <span className={styles.pressLabel}>{label}</span>
+              <span className={styles.pressStatus}>{statusStr}</span>
+              {status.winner !== 'incomplete' && (
+                <span
+                  className={styles.pressPayout}
+                  style={{ color: aDelta > 0 ? 'var(--green)' : aDelta < 0 ? '#dc2626' : 'var(--text-muted)' }}
+                >
+                  {status.winner === 'half' ? 'Halved' : `${fmtMoney(Math.abs(nassauBet.amount))}`}
+                </span>
+              )}
+            </div>
+            {childPresses.length > 0 && (
+              <PressRows
+                presses={childPresses}
+                nassauBet={nassauBet}
+                nassauBetId={nassauBetId}
+                holeData={holeData}
+                players={players}
+                allPresses={allPresses}
+              />
             )}
           </div>
         );
@@ -148,8 +167,10 @@ function NassauBetCard({ betId, bet, holeData, players, allPresses }) {
               <PressRows
                 presses={pressesByLabel[label] || []}
                 nassauBet={bet}
+                nassauBetId={betId}
                 holeData={holeData}
                 players={players}
+                allPresses={allPresses}
               />
             </div>
           );
