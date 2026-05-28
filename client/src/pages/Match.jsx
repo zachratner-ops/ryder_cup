@@ -372,11 +372,17 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
     <div className={styles.betsTab}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <div className={styles.sectionLabel} style={{ marginBottom: 0 }}>Bets in this match</div>
-        <button className={styles.addBetBtn} onClick={() => { setShowCreate(true); setCreateError(''); }}>+ Add Bet</button>
+        {(isAdmin || (playerId && allPlayerIds.includes(playerId))) && (
+          <button className={styles.addBetBtn} onClick={() => { setShowCreate(true); setCreateError(''); }}>+ Add Bet</button>
+        )}
       </div>
 
       {betCount === 0 && !showCreate && (
-        <div className={styles.betsTabEmpty}>No bets yet — tap Add Bet to start one</div>
+        <div className={styles.betsTabEmpty}>
+          {(isAdmin || (playerId && allPlayerIds.includes(playerId)))
+            ? 'No bets yet — tap Add Bet to start one'
+            : 'No bets yet'}
+        </div>
       )}
 
       {/* Nassau bets */}
