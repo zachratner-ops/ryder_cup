@@ -62,18 +62,17 @@ function PressRows({ presses, nassauBet, nassauBetId, holeData, players, allPres
         const label = `Press ${startHole}–${endHole}`;
         const decided = status.winner !== 'incomplete';
 
-        const nameA = firstName(players, nassauBet.playerA);
-        const nameB = firstName(players, nassauBet.playerB);
+        const is2v2Press = nassauBet.mode === '2v2';
+        const nameA = is2v2Press
+          ? (nassauBet.teamAIds || []).map(id => firstName(players, id)).join(' & ')
+          : firstName(players, nassauBet.playerA);
+        const nameB = is2v2Press
+          ? (nassauBet.teamBIds || []).map(id => firstName(players, id)).join(' & ')
+          : firstName(players, nassauBet.playerB);
         const statusStr = formatSegmentStatus(status, nameA, nameB, startHole, endHole);
 
-        const winnerPlayerId =
-          status.winner === 'playerA' ? nassauBet.playerA :
-          status.winner === 'playerB' ? nassauBet.playerB : null;
-        const loserPlayerId =
-          status.winner === 'playerA' ? nassauBet.playerB :
-          status.winner === 'playerB' ? nassauBet.playerA : null;
-        const winnerName = winnerPlayerId ? firstName(players, winnerPlayerId) : null;
-        const loserName = loserPlayerId ? firstName(players, loserPlayerId) : null;
+        const winnerName = status.winner === 'playerA' ? nameA : status.winner === 'playerB' ? nameB : null;
+        const loserName = status.winner === 'playerA' ? nameB : status.winner === 'playerB' ? nameA : null;
 
         // Find any sub-presses whose parent is this press
         const childPresses = allPresses
@@ -124,12 +123,21 @@ function PressRows({ presses, nassauBet, nassauBetId, holeData, players, allPres
 
 function NassauBetCard({ betId, bet, holeData, players, allPresses, playerId, matches, rounds }) {
   const componentStatuses = computeNassauStatus(holeData, bet);
-  const nameA = firstName(players, bet.playerA);
-  const nameB = firstName(players, bet.playerB);
+  const is2v2 = bet.mode === '2v2';
+  const nameA = is2v2
+    ? (bet.teamAIds || []).map(id => firstName(players, id)).join(' & ')
+    : firstName(players, bet.playerA);
+  const nameB = is2v2
+    ? (bet.teamBIds || []).map(id => firstName(players, id)).join(' & ')
+    : firstName(players, bet.playerB);
+  const colorA = is2v2 ? 'var(--teamA)' : teamColor(players, bet.playerA);
+  const colorB = is2v2 ? 'var(--teamB)' : teamColor(players, bet.playerB);
 
-  const isViewerA = playerId === bet.playerA;
-  const isViewerB = playerId === bet.playerB;
-  const isViewer = isViewerA || isViewerB;
+  const isViewerA = !is2v2 && playerId === bet.playerA;
+  const isViewerB = !is2v2 && playerId === bet.playerB;
+  const isViewer = is2v2
+    ? [...(bet.teamAIds || []), ...(bet.teamBIds || [])].includes(playerId)
+    : isViewerA || isViewerB;
 
   // Match / round info for the header link
   const match = matches && bet.matchId ? matches[bet.matchId] : null;
@@ -152,9 +160,9 @@ function NassauBetCard({ betId, bet, holeData, players, allPresses, playerId, ma
       <div className={styles.nassauHeader}>
         <div className={styles.nassauHeaderLeft}>
           <div className={styles.nassauPlayers}>
-            <span style={{ color: teamColor(players, bet.playerA) }}>{nameA}</span>
+            <span style={{ color: colorA }}>{nameA}</span>
             <span className={styles.vsText}>vs</span>
-            <span style={{ color: teamColor(players, bet.playerB) }}>{nameB}</span>
+            <span style={{ color: colorB }}>{nameB}</span>
           </div>
           {match && (
             <Link to={`/match/${bet.matchId}`} className={styles.nassauMatchLink}>
@@ -170,14 +178,12 @@ function NassauBetCard({ betId, bet, holeData, players, allPresses, playerId, ma
           const statusStr = formatSegmentStatus(s, nameA, nameB, startHole, endHole);
           const decided = s.winner !== 'incomplete';
 
-          const winnerPlayerId =
-            s.winner === 'playerA' ? bet.playerA :
-            s.winner === 'playerB' ? bet.playerB : null;
-          const loserPlayerId =
-            s.winner === 'playerA' ? bet.playerB :
-            s.winner === 'playerB' ? bet.playerA : null;
-          const winnerName = winnerPlayerId ? firstName(players, winnerPlayerId) : null;
-          const loserName = loserPlayerId ? firstName(players, loserPlayerId) : null;
+          const winnerName =
+            s.winner === 'playerA' ? nameA :
+            s.winner === 'playerB' ? nameB : null;
+          const loserName =
+            s.winner === 'playerA' ? nameB :
+            s.winner === 'playerB' ? nameA : null;
 
           // Block: only accent left-bar while in progress; no tinting when decided
           const blockMod = !decided && s.holesPlayed > 0 ? styles.segBlockInProgress : '';
@@ -867,14 +873,25 @@ export default function Bets({ playerId }) {
   const playerBalances = useMemo(() => {
     const balances = {};
 
+    function apply2v2Payout(bet, deltaA, deltaB) {
+      const aIds = bet.teamAIds || [];
+      const bIds = bet.teamBIds || [];
+      if (aIds.length) aIds.forEach(pid => { balances[pid] = (balances[pid] || 0) + deltaA / aIds.length; });
+      if (bIds.length) bIds.forEach(pid => { balances[pid] = (balances[pid] || 0) + deltaB / bIds.length; });
+    }
+
     // Nassau bets
     Object.entries(nassauBets).forEach(([betId, bet]) => {
       const holeData = allHoles[bet.matchId] || {};
       const status = computeNassauStatus(holeData, bet);
       const payout = computeNassauPayout(status, bet);
-      Object.entries(payout).forEach(([pid, delta]) => {
-        balances[pid] = (balances[pid] || 0) + delta;
-      });
+      if (bet.mode === '2v2') {
+        apply2v2Payout(bet, payout['teamA'] || 0, payout['teamB'] || 0);
+      } else {
+        Object.entries(payout).forEach(([pid, delta]) => {
+          balances[pid] = (balances[pid] || 0) + delta;
+        });
+      }
     });
 
     // Presses
@@ -885,9 +902,13 @@ export default function Bets({ playerId }) {
       const { startHole, endHole } = press;
       const status = computeSegmentStatus(holeData, nassauBet, startHole, endHole);
       const payout = computePressPayout(status, nassauBet);
-      Object.entries(payout).forEach(([pid, delta]) => {
-        balances[pid] = (balances[pid] || 0) + delta;
-      });
+      if (nassauBet.mode === '2v2') {
+        apply2v2Payout(nassauBet, payout['teamA'] || 0, payout['teamB'] || 0);
+      } else {
+        Object.entries(payout).forEach(([pid, delta]) => {
+          balances[pid] = (balances[pid] || 0) + delta;
+        });
+      }
     });
 
     // Skins bets
