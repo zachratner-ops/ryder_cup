@@ -15,25 +15,35 @@
  *   diff: positive = playerA leads by that many holes, negative = playerB leads
  */
 export function computeSegmentStatus(holeData, bet, startHole, endHole) {
-  const { playerA, playerB, strokeAllocation } = bet;
-  const allocA = strokeAllocation?.[playerA]?.holes || [];
-  const allocB = strokeAllocation?.[playerB]?.holes || [];
-
   let diff = 0;
   let holesPlayed = 0;
 
-  for (let h = startHole; h <= endHole; h++) {
-    const grossA = holeData?.[h]?.[playerA]?.gross;
-    const grossB = holeData?.[h]?.[playerB]?.gross;
-    if (grossA == null || grossB == null) continue;
+  if (bet.mode === '2v2') {
+    // Use pre-computed holeWinner ('teamA' | 'teamB' | 'half') instead of net scores
+    for (let h = startHole; h <= endHole; h++) {
+      const hw = holeData?.[h]?.holeWinner;
+      if (!hw) continue;
+      holesPlayed++;
+      if (hw === 'teamA') diff++;
+      else if (hw === 'teamB') diff--;
+    }
+  } else {
+    const { playerA, playerB, strokeAllocation } = bet;
+    const allocA = strokeAllocation?.[playerA]?.holes || [];
+    const allocB = strokeAllocation?.[playerB]?.holes || [];
 
-    holesPlayed++;
-    const netA = grossA - (allocA.includes(h) ? 1 : 0);
-    const netB = grossB - (allocB.includes(h) ? 1 : 0);
+    for (let h = startHole; h <= endHole; h++) {
+      const grossA = holeData?.[h]?.[playerA]?.gross;
+      const grossB = holeData?.[h]?.[playerB]?.gross;
+      if (grossA == null || grossB == null) continue;
 
-    if (netA < netB) diff++;      // playerA wins hole
-    else if (netB < netA) diff--; // playerB wins hole
-    // equal = halved, diff unchanged
+      holesPlayed++;
+      const netA = grossA - (allocA.includes(h) ? 1 : 0);
+      const netB = grossB - (allocB.includes(h) ? 1 : 0);
+
+      if (netA < netB) diff++;      // playerA wins hole
+      else if (netB < netA) diff--; // playerB wins hole
+    }
   }
 
   const totalHoles = endHole - startHole + 1;

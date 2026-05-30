@@ -280,7 +280,7 @@ function SkinsBetCard({ betId, bet, holeData, players, matches, rounds }) {
   const [expanded, setExpanded] = useState(false);
 
   const result = useMemo(
-    () => computeSkinsResult(holeData, bet.players || [], bet.amount),
+    () => computeSkinsResult(holeData, bet.players || [], bet.amount, bet.startHole ?? 1, bet.endHole ?? 18),
     [holeData, bet],
   );
   const { holeResults, skinsWon, payouts, pendingCarryover } = result;
@@ -388,6 +388,8 @@ function SkinsCreateForm({ players, matches, rounds, playerId, onClose }) {
   const [matchId, setMatchId] = useState('');
   const [selectedPlayers, setSelectedPlayers] = useState([]);
   const [amount, setAmount] = useState('');
+  const [startHole, setStartHole] = useState('1');
+  const [endHole, setEndHole] = useState('18');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -413,6 +415,8 @@ function SkinsCreateForm({ players, matches, rounds, playerId, onClose }) {
     if (!matchId) { setError('Select a match.'); return; }
     if (selectedPlayers.length < 2) { setError('Select at least 2 players.'); return; }
     if (!amount || parseFloat(amount) <= 0) { setError('Enter a dollar amount per skin.'); return; }
+    const s = parseInt(startHole), e = parseInt(endHole);
+    if (!s || !e || s < 1 || e > 18 || s >= e) { setError('Enter a valid hole range (start < end, 1–18).'); return; }
     setLoading(true);
     setError('');
     try {
@@ -420,6 +424,8 @@ function SkinsCreateForm({ players, matches, rounds, playerId, onClose }) {
         matchId,
         players: selectedPlayers,
         amount: parseFloat(amount),
+        startHole: s,
+        endHole: e,
         createdBy: playerId || 'unknown',
         createdAt: Date.now(),
         status: 'open',
@@ -468,6 +474,25 @@ function SkinsCreateForm({ players, matches, rounds, playerId, onClose }) {
           </div>
         </div>
       )}
+
+      <div className={styles.formGroup}>
+        <label className={styles.formLabel}>Hole range</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            className={styles.formInput}
+            type="number" min="1" max="17" placeholder="Start"
+            value={startHole} onChange={e => setStartHole(e.target.value)}
+            style={{ flex: 1 }}
+          />
+          <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>–</span>
+          <input
+            className={styles.formInput}
+            type="number" min="2" max="18" placeholder="End"
+            value={endHole} onChange={e => setEndHole(e.target.value)}
+            style={{ flex: 1 }}
+          />
+        </div>
+      </div>
 
       <div className={styles.formGroup}>
         <label className={styles.formLabel}>$ Per skin</label>
@@ -978,7 +1003,7 @@ export default function Bets({ playerId }) {
     // Skins bets
     Object.entries(skinsBets).forEach(([, bet]) => {
       const holeData = allHoles[bet.matchId] || {};
-      const { payouts } = computeSkinsResult(holeData, bet.players || [], bet.amount);
+      const { payouts } = computeSkinsResult(holeData, bet.players || [], bet.amount, bet.startHole ?? 1, bet.endHole ?? 18);
       Object.entries(payouts).forEach(([pid, delta]) => {
         balances[pid] = (balances[pid] || 0) + delta;
       });

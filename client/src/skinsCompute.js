@@ -2,12 +2,13 @@
 // holeData: { [hole]: { [playerId]: { net } } }
 // players: array of playerIds competing
 // amount: dollars per skin
-export function computeSkinsResult(holeData, players, amount) {
+// startHole / endHole: hole range (default 1–18)
+export function computeSkinsResult(holeData, players, amount, startHole = 1, endHole = 18) {
   let carryover = 1;
   const skinsWon = {}; // pid → skins count
   const holeResults = [];
 
-  for (let h = 1; h <= 18; h++) {
+  for (let h = startHole; h <= endHole; h++) {
     const nets = players.map(pid => ({
       pid,
       net: holeData?.[h]?.[pid]?.net ?? null,

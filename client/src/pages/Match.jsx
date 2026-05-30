@@ -12,6 +12,7 @@ import {
   canPress,
   formatSegmentStatus,
 } from '../nassauCompute';
+import { computeSkinsResult } from '../skinsCompute';
 
 // ── helpers shared by MatchBetsTab ──────────────────────────────────────────
 
@@ -39,7 +40,7 @@ function nextPressStartHole(holeData, playerA, playerB, startHole, endHole) {
 
 // ── MatchBetsTab component ───────────────────────────────────────────────────
 
-function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allPlayerIds, playerId, isAdmin }) {
+function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skinsBets, match, allPlayerIds, playerId, isAdmin }) {
   const [presses, setPresses] = useState({});
   const [confirmPress, setConfirmPress] = useState(null); // { nassauBetId, segment, pressId?, startHole, endHole, amount }
   const [showCreate, setShowCreate] = useState(false);
@@ -47,6 +48,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
   const [createError, setCreateError] = useState('');
 
   // Nassau create form (pre-filled to this match)
+  const [nassauMode, setNassauMode] = useState('1v1'); // '1v1' | '2v2'
   const [newOpponent, setNewOpponent] = useState('');
   const [newAmount, setNewAmount] = useState('');
   const [newCompFront, setNewCompFront] = useState(true);
@@ -55,6 +57,12 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
   const [newCompCustom, setNewCompCustom] = useState(false);
   const [newCustomStart, setNewCustomStart] = useState('');
   const [newCustomEnd, setNewCustomEnd] = useState('');
+
+  // Skins create form
+  const [skinsAmount, setSkinsAmount] = useState('');
+  const [skinsStartHole, setSkinsStartHole] = useState('1');
+  const [skinsEndHole, setSkinsEndHole] = useState('18');
+  const [skinsPlayers, setSkinsPlayers] = useState(allPlayerIds);
 
   // Custom create form
   const [createTab, setCreateTab] = useState('nassau');
@@ -102,10 +110,91 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
     [customBets, matchId]
   );
 
-  const betCount = matchNassauBets.length + matchCustomBets.length;
+  // Skins bets for this match
+  const matchSkinsBets = useMemo(() =>
+    Object.entries(skinsBets).filter(([, b]) => b.matchId === matchId),
+    [skinsBets, matchId]
+  );
+
+  const betCount = matchNassauBets.length + matchCustomBets.length + matchSkinsBets.length;
+
+  async function handleCreateSkins() {
+    const s = parseInt(skinsStartHole), e = parseInt(skinsEndHole);
+    if (!skinsAmount || parseFloat(skinsAmount) <= 0) { setCreateError('Enter a dollar amount per skin.'); return; }
+    if (skinsPlayers.length < 2) { setCreateError('Select at least 2 players.'); return; }
+    if (!s || !e || s < 1 || e > 18 || s >= e) { setCreateError('Invalid hole range.'); return; }
+    setCreateLoading(true);
+    setCreateError('');
+    try {
+      await push(ref(db, 'skinsBets'), {
+        matchId,
+        players: skinsPlayers,
+        amount: parseFloat(skinsAmount),
+        startHole: s,
+        endHole: e,
+        createdBy: playerId || 'unknown',
+        createdAt: Date.now(),
+        status: 'open',
+      });
+      setShowCreate(false);
+      setSkinsAmount('');
+    } catch (err) {
+      setCreateError(err.message);
+    } finally {
+      setCreateLoading(false);
+    }
+  }
 
   async function handleCreateNassau() {
     const myId = isAdmin ? null : playerId;
+
+    if (nassauMode === '2v2') {
+      if (!newAmount) { setCreateError('Enter an amount.'); return; }
+      const components = [];
+      if (newCompFront) components.push({ label: 'Front 9', startHole: 1, endHole: 9 });
+      if (newCompBack) components.push({ label: 'Back 9', startHole: 10, endHole: 18 });
+      if (newCompOverall) components.push({ label: 'Overall', startHole: 1, endHole: 18 });
+      if (newCompCustom) {
+        const cs = parseInt(newCustomStart), ce = parseInt(newCustomEnd);
+        if (!cs || !ce || cs < 1 || ce > 18 || cs >= ce) {
+          setCreateError('Custom range: enter valid holes (1–18, start < end).');
+          return;
+        }
+        components.push({ label: `Holes ${cs}–${ce}`, startHole: cs, endHole: ce });
+      }
+      if (components.length === 0) { setCreateError('Select at least one component.'); return; }
+      setCreateLoading(true);
+      setCreateError('');
+      try {
+        const res = await fetch('/api/bets/nassau', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            matchId,
+            mode: '2v2',
+            playerA: 'teamA',
+            playerB: 'teamB',
+            teamAIds: match?.teamA?.playerIds || [],
+            teamBIds: match?.teamB?.playerIds || [],
+            amount: parseFloat(newAmount),
+            components,
+            createdBy: myId || 'admin',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        setShowCreate(false);
+        setNewAmount('');
+        setNewCompFront(true); setNewCompBack(true); setNewCompOverall(true);
+        setNewCompCustom(false); setNewCustomStart(''); setNewCustomEnd('');
+      } catch (err) {
+        setCreateError(err.message);
+      } finally {
+        setCreateLoading(false);
+      }
+      return;
+    }
+
     if (!myId && !isAdmin) { setCreateError('Select your player first.'); return; }
     if (!newOpponent || !newAmount) { setCreateError('Fill in all fields.'); return; }
     if (newOpponent === myId) { setCreateError('Pick a different opponent.'); return; }
@@ -322,18 +411,25 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
 
   function renderNassauCard([betId, bet]) {
     const componentStatuses = computeNassauStatus(holeData, bet);
-    const nameA = betFirstName(players, bet.playerA);
-    const nameB = betFirstName(players, bet.playerB);
+    const is2v2 = bet.mode === '2v2';
+    const nameA = is2v2
+      ? (bet.teamAIds || []).map(id => players[id]?.name?.split(' ')[0] || id).join(' & ')
+      : betFirstName(players, bet.playerA);
+    const nameB = is2v2
+      ? (bet.teamBIds || []).map(id => players[id]?.name?.split(' ')[0] || id).join(' & ')
+      : betFirstName(players, bet.playerB);
+    const colorA = is2v2 ? 'var(--teamA)' : betTeamColor(players, bet.playerA);
+    const colorB = is2v2 ? 'var(--teamB)' : betTeamColor(players, bet.playerB);
 
     return (
       <div key={betId} className={styles.nassauCard}>
         <div className={styles.nassauCardHeader}>
           <div className={styles.nassauPlayers}>
-            <span style={{ color: betTeamColor(players, bet.playerA) }}>{nameA}</span>
+            <span style={{ color: colorA }}>{nameA}</span>
             <span className={styles.nassauVs}>vs</span>
-            <span style={{ color: betTeamColor(players, bet.playerB) }}>{nameB}</span>
+            <span style={{ color: colorB }}>{nameB}</span>
           </div>
-          <div className={styles.nassauMeta}>${bet.amount}/comp</div>
+          <div className={styles.nassauMeta}>${bet.amount}/comp{is2v2 ? ' · 2v2' : ''}</div>
         </div>
 
         <div className={styles.nassauSegments}>
@@ -534,6 +630,47 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
         );
       })}
 
+      {/* Skins bets */}
+      {matchSkinsBets.map(([betId, bet]) => {
+        const skinsPids = bet.players || [];
+        const sh = bet.startHole ?? 1, eh = bet.endHole ?? 18;
+        const { holeResults, skinsWon, payouts, pendingCarryover } = computeSkinsResult(holeData, skinsPids, bet.amount, sh, eh);
+        const holesPlayed = holeResults.filter(r => r.status !== 'pending').length;
+        const totalSkins = Object.values(skinsWon).reduce((a, b) => a + b, 0);
+        const rangeLabel = sh === 1 && eh === 18 ? 'All 18' : `Holes ${sh}–${eh}`;
+        return (
+          <div key={betId} className={styles.customBetCard}>
+            <div className={styles.customBetHeader}>
+              <span className={styles.customBetDesc}>🎯 Skins · {rangeLabel}</span>
+              <span className={styles.customBetAmount}>${bet.amount}/skin</span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 8 }}>
+              {skinsPids.map(pid => {
+                const skins = skinsWon[pid] || 0;
+                const payout = payouts[pid] || 0;
+                return (
+                  <div key={pid} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontWeight: 700, fontSize: 13, color: betTeamColor(players, pid) }}>
+                      {betFirstName(players, pid)}
+                    </span>
+                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{skins} {skins === 1 ? 'skin' : 'skins'}</span>
+                    {totalSkins > 0 && (
+                      <span style={{ fontSize: 13, fontWeight: 700, color: payout > 0 ? 'var(--green)' : payout < 0 ? '#dc2626' : 'var(--text-muted)' }}>
+                        {payout > 0 ? `+$${payout}` : payout < 0 ? `-$${Math.abs(payout)}` : '$0'}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+              {holesPlayed}/{eh - sh + 1} played
+              {pendingCarryover > 1 && <span style={{ color: '#f59e0b', marginLeft: 8 }}>🔥 {pendingCarryover} carrying</span>}
+            </div>
+          </div>
+        );
+      })}
+
       {/* Press confirm overlay */}
       {confirmPress && (
         <div className={styles.pressConfirm}>
@@ -562,6 +699,13 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
               Nassau
             </button>
             <button
+              className={`${styles.ybTabBtn} ${createTab === 'skins' ? styles.ybTabActive : ''}`}
+              style={createTab === 'skins' ? { color: 'var(--accent)', borderColor: 'var(--accent)' } : {}}
+              onClick={() => { setCreateTab('skins'); setCreateError(''); setSkinsPlayers(allPlayerIds); }}
+            >
+              Skins
+            </button>
+            <button
               className={`${styles.ybTabBtn} ${createTab === 'custom' ? styles.ybTabActive : ''}`}
               style={createTab === 'custom' ? { color: 'var(--accent)', borderColor: 'var(--accent)' } : {}}
               onClick={() => { setCreateTab('custom'); setCreateError(''); }}
@@ -572,6 +716,27 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
 
           {createTab === 'nassau' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <div className={styles.sectionLabel}>Format</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {['1v1', '2v2'].map(mode => (
+                    <button
+                      key={mode}
+                      type="button"
+                      style={{
+                        flex: 1, padding: '9px 0', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                        border: `1.5px solid ${nassauMode === mode ? 'var(--accent)' : 'var(--border)'}`,
+                        background: nassauMode === mode ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'var(--surface2)',
+                        color: nassauMode === mode ? 'var(--accent)' : 'var(--text-muted)',
+                      }}
+                      onClick={() => { setNassauMode(mode); setCreateError(''); }}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {nassauMode === '1v1' && (
               <div>
                 <div className={styles.sectionLabel}>Opponent</div>
                 <select
@@ -585,6 +750,15 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
                   ))}
                 </select>
               </div>
+              )}
+              {nassauMode === '2v2' && (
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', background: 'var(--surface2)', borderRadius: 8, padding: '10px 12px' }}>
+                {(match?.teamA?.playerIds || []).map(id => players[id]?.name?.split(' ')[0] || id).join(' & ')}
+                {' vs '}
+                {(match?.teamB?.playerIds || []).map(id => players[id]?.name?.split(' ')[0] || id).join(' & ')}
+              </div>
+              )}
+              <div>
               <div>
                 <div className={styles.sectionLabel}>Components</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -645,6 +819,69 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
                 disabled={createLoading}
               >
                 {createLoading ? 'Creating…' : 'Create Nassau Bet'}
+              </button>
+            </div>
+          )}
+
+          {createTab === 'skins' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <div className={styles.sectionLabel}>Players</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {allPlayerIds.map(id => {
+                    const on = skinsPlayers.includes(id);
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        style={{
+                          padding: '7px 14px', borderRadius: 20,
+                          border: `1.5px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
+                          background: on ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'var(--surface2)',
+                          color: on ? 'var(--accent)' : 'var(--text-muted)',
+                          fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                        }}
+                        onClick={() => setSkinsPlayers(prev =>
+                          prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+                        )}
+                      >
+                        {players[id]?.name?.split(' ')[0] || id}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <div className={styles.sectionLabel}>Hole Range</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    style={{ flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', fontSize: 15, color: 'var(--text)', textAlign: 'center' }}
+                    type="number" min="1" max="17" placeholder="Start"
+                    value={skinsStartHole} onChange={e => setSkinsStartHole(e.target.value)}
+                  />
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>–</span>
+                  <input
+                    style={{ flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', fontSize: 15, color: 'var(--text)', textAlign: 'center' }}
+                    type="number" min="2" max="18" placeholder="End"
+                    value={skinsEndHole} onChange={e => setSkinsEndHole(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className={styles.sectionLabel}>$ Per Skin</div>
+                <input
+                  style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '11px 14px', fontSize: 15, width: '100%', color: 'var(--text)', boxSizing: 'border-box' }}
+                  type="number" min="1" step="1" placeholder="e.g. 5"
+                  value={skinsAmount} onChange={e => setSkinsAmount(e.target.value)}
+                />
+              </div>
+              {createError && <p style={{ color: '#dc2626', fontSize: 14, margin: 0 }}>{createError}</p>}
+              <button
+                style={{ background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 12, padding: 15, fontSize: 16, fontWeight: 700, cursor: 'pointer', opacity: createLoading ? 0.5 : 1 }}
+                onClick={handleCreateSkins}
+                disabled={createLoading}
+              >
+                {createLoading ? 'Creating…' : 'Create Skins Bet'}
               </button>
             </div>
           )}
@@ -762,6 +999,7 @@ export default function Match({ playerId, isAdmin }) {
   // Side bets data
   const [nassauBets, setNassauBets] = useState({});
   const [customBets, setCustomBets] = useState({});
+  const [skinsBets, setSkinsBets] = useState({});
   const [entry, setEntry] = useState({ gross: '', fairwayHit: null, gir: false, putts: '' });
   const [justSaved, setJustSaved] = useState(false);
   // syncState: null | 'saving' | 'synced' | { pending: number }
@@ -790,7 +1028,8 @@ export default function Match({ playerId, isAdmin }) {
     if (matchTab !== 'bets') return;
     const u1 = onValue(ref(db, 'nassauBets'), (s) => setNassauBets(s.val() || {}));
     const u2 = onValue(ref(db, 'customBets'), (s) => setCustomBets(s.val() || {}));
-    return () => { u1(); u2(); };
+    const u3 = onValue(ref(db, 'skinsBets'), (s) => setSkinsBets(s.val() || {}));
+    return () => { u1(); u2(); u3(); };
   }, [matchTab]);
 
   // Auto-advance to first unplayed hole on initial load
@@ -1598,6 +1837,8 @@ export default function Match({ playerId, isAdmin }) {
           players={players}
           nassauBets={nassauBets}
           customBets={customBets}
+          skinsBets={skinsBets}
+          match={match}
           allPlayerIds={allPlayerIds}
           playerId={playerId}
           isAdmin={isAdmin}
