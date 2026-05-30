@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { ref, onValue } from 'firebase/database';
 import { db } from './firebase';
@@ -13,19 +13,6 @@ import History from './pages/History';
 import Admin from './pages/Admin';
 import Profile from './pages/Profile';
 import Nav from './components/Nav';
-import styles from './App.module.css';
-
-function ProfileAvatar({ playerId, players }) {
-  const location = useLocation();
-  // Hide on profile and select pages
-  if (location.pathname === '/profile' || location.pathname === '/select') return null;
-  const initial = playerId && players?.[playerId]?.name?.[0]?.toUpperCase();
-  return (
-    <Link to="/profile" className={styles.profileAvatar} aria-label="Profile">
-      {initial || '👤'}
-    </Link>
-  );
-}
 
 export default function App() {
   const { playerId, isAdmin, selectPlayer, activateAdmin, clearPlayer } = usePlayer();
@@ -40,7 +27,6 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <ProfileAvatar playerId={playerId} players={players} />
       <Routes>
         <Route path="/select" element={<PlayerSelect onSelect={selectPlayer} />} />
 

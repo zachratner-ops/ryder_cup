@@ -20,6 +20,10 @@ export default function Nav() {
         <span className={styles.icon}>📊</span>
         <span>Stats</span>
       </NavLink>
+      <NavLink to="/profile" className={({ isActive }) => isActive ? styles.active : ''}>
+        <span className={styles.icon}>👤</span>
+        <span>Profile</span>
+      </NavLink>
     </nav>
   );
 }
