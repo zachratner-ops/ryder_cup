@@ -208,7 +208,12 @@ router.post('/', async (req, res) => {
 
     const rng = makePRNG(seed);
 
-    await db.ref('/').set(null);
+    // Wipe tournament-specific paths only — preserve tournamentArchives
+    await db.ref().update({
+      tournament: null, players: null, rounds: null, matches: null,
+      holes: null, leaderboard: null, nassauBets: null, customBets: null,
+      presses: null, course: null, activeSessions: null,
+    });
     const u = {};
 
     // Tournament meta
