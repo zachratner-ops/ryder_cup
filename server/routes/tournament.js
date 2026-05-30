@@ -85,7 +85,20 @@ router.post('/reset', async (req, res) => {
     if (snap.val() && snap.val() !== adminPin) {
       return res.status(403).json({ error: 'Bad PIN' });
     }
-    await db.ref('/').set(null);
+    // Wipe tournament-specific paths only — preserve tournamentArchives
+    await db.ref().update({
+      tournament: null,
+      players: null,
+      rounds: null,
+      matches: null,
+      holes: null,
+      leaderboard: null,
+      nassauBets: null,
+      customBets: null,
+      presses: null,
+      course: null,
+      activeSessions: null,
+    });
     res.json({ ok: true });
   } catch (err) {
     console.error(err);

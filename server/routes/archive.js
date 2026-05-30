@@ -110,9 +110,22 @@ router.post('/', async (req, res) => {
     // Write archive
     await db.ref(`tournamentArchives/${archiveId}`).set(archive);
 
-    // Optionally wipe the current tournament for a fresh start
+    // Optionally wipe the current tournament for a fresh start.
+    // Only null out tournament-specific paths — tournamentArchives must survive.
     if (reset) {
-      await db.ref('/').set(null);
+      await db.ref().update({
+        tournament: null,
+        players: null,
+        rounds: null,
+        matches: null,
+        holes: null,
+        leaderboard: null,
+        nassauBets: null,
+        customBets: null,
+        presses: null,
+        course: null,
+        activeSessions: null,
+      });
     }
 
     res.json({ ok: true, archiveId });
