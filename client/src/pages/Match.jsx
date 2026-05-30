@@ -1377,7 +1377,7 @@ export default function Match({ playerId, isAdmin }) {
     <div className={styles.page}>
       {/* Header */}
       <div className={styles.header}>
-        <button className={styles.back} onClick={() => navigate('/')}>‹ Back</button>
+        <button className={styles.back} onClick={() => navigate('/leaderboard')}>‹ Leaderboard</button>
         <div className={styles.matchStatus}>{matchStatus}</div>
       </div>
 
