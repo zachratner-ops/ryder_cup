@@ -713,11 +713,11 @@
 /* ── Stacked payout lines (winner + loser) ───────────── */
 
 .nassauSegPayoutLines {
-  margin-top: 5px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 2px;
+  flex-shrink: 0;
 }
 
 .nassauSegPayoutWinner {
@@ -741,8 +741,9 @@
 
 .nassauSegRow {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .nassauPressBtn {

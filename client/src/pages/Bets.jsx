@@ -185,23 +185,25 @@ function NassauBetCard({ betId, bet, holeData, players, allPresses, playerId, ma
               <div className={styles.segBlockHeader}>
                 <span className={styles.segLabel}>{label}</span>
               </div>
-              <span
-                className={`${styles.segStatus} ${
-                  decided && s.winner !== 'half' ? styles.segStatusWon :
-                  s.holesPlayed === 0 ? styles.segStatusMuted : ''
-                }`}
-              >
-                {statusStr}
-              </span>
-              {decided && s.winner !== 'half' && (
-                <div className={styles.segPayoutLines}>
-                  <span className={styles.segPayoutWinner}>{winnerName} +${bet.amount}</span>
-                  <span className={styles.segPayoutLoser}>{loserName} -${bet.amount}</span>
-                </div>
-              )}
-              {decided && s.winner === 'half' && (
-                <span className={styles.segPayoutHalved}>Halved — no money</span>
-              )}
+              <div className={styles.segStatusRow}>
+                <span
+                  className={`${styles.segStatus} ${
+                    decided && s.winner !== 'half' ? styles.segStatusWon :
+                    s.holesPlayed === 0 ? styles.segStatusMuted : ''
+                  }`}
+                >
+                  {statusStr}
+                </span>
+                {decided && s.winner !== 'half' && (
+                  <div className={styles.segPayoutLines}>
+                    <span className={styles.segPayoutWinner}>{winnerName} +${bet.amount}</span>
+                    <span className={styles.segPayoutLoser}>{loserName} -${bet.amount}</span>
+                  </div>
+                )}
+                {decided && s.winner === 'half' && (
+                  <span className={styles.segPayoutHalved}>Halved — no money</span>
+                )}
+              </div>
               <PressRows
                 presses={pressesByLabel[label] || []}
                 nassauBet={bet}

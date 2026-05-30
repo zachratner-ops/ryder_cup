@@ -370,17 +370,16 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
                     {statusStr}
                   </span>
                   {!decided && renderPressButton(bet, betId, s, startHole, endHole, label, null)}
+                  {decided && s.winner !== 'half' && (
+                    <div className={styles.nassauSegPayoutLines}>
+                      <span className={styles.nassauSegPayoutWinner}>{winnerName} +${bet.amount}</span>
+                      <span className={styles.nassauSegPayoutLoser}>{loserName} -${bet.amount}</span>
+                    </div>
+                  )}
+                  {decided && s.winner === 'half' && (
+                    <span className={styles.nassauSegPayoutHalved}>Halved — no money</span>
+                  )}
                 </div>
-
-                {decided && s.winner !== 'half' && (
-                  <div className={styles.nassauSegPayoutLines}>
-                    <span className={styles.nassauSegPayoutWinner}>{winnerName} +${bet.amount}</span>
-                    <span className={styles.nassauSegPayoutLoser}>{loserName} -${bet.amount}</span>
-                  </div>
-                )}
-                {decided && s.winner === 'half' && (
-                  <span className={styles.nassauSegPayoutHalved}>Halved — no money</span>
-                )}
 
                 {/* Segment-level presses */}
                 {segPresses.length > 0 && (
