@@ -19,7 +19,7 @@ router.post('/', async (req, res) => {
 
     // Read all data in parallel
     const [tournSnap, playersSnap, roundsSnap, matchesSnap, holesSnap, lbSnap,
-           nassauSnap, customSnap, pressSnap] = await Promise.all([
+           nassauSnap, customSnap, pressSnap, skinsSnap] = await Promise.all([
       db.ref('tournament').once('value'),
       db.ref('players').once('value'),
       db.ref('rounds').once('value'),
@@ -29,6 +29,7 @@ router.post('/', async (req, res) => {
       db.ref('nassauBets').once('value'),
       db.ref('customBets').once('value'),
       db.ref('presses').once('value'),
+      db.ref('skinsBets').once('value'),
     ]);
 
     const tournament = tournSnap.val();
@@ -39,7 +40,8 @@ router.post('/', async (req, res) => {
     const leaderboard = lbSnap.val() || {};
     const nassauBets = nassauSnap.val() || {};
     const customBets = customSnap.val() || {};
-    const presses = pressSnap.val() || {};
+    const presses    = pressSnap.val()  || {};
+    const skinsBets  = skinsSnap.val()  || {};
 
     if (!tournament?.name) {
       return res.status(400).json({ error: 'No tournament to archive' });
@@ -140,6 +142,7 @@ router.post('/', async (req, res) => {
       nassauBets,
       customBets,
       presses,
+      skinsBets,
     };
 
     // Write archive
@@ -158,6 +161,7 @@ router.post('/', async (req, res) => {
         nassauBets: null,
         customBets: null,
         presses: null,
+        skinsBets: null,
         course: null,
         activeSessions: null,
       });

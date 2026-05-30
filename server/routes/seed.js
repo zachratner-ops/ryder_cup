@@ -212,7 +212,7 @@ router.post('/', async (req, res) => {
     await db.ref().update({
       tournament: null, players: null, rounds: null, matches: null,
       holes: null, leaderboard: null, nassauBets: null, customBets: null,
-      presses: null, course: null, activeSessions: null,
+      presses: null, skinsBets: null, course: null, activeSessions: null,
     });
     const u = {};
 

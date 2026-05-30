@@ -10,6 +10,7 @@ import {
   formatSegmentStatus,
   DEFAULT_COMPONENTS,
 } from '../nassauCompute';
+import { computeSkinsResult } from '../skinsCompute';
 import styles from './Bets.module.css';
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -268,6 +269,224 @@ function CustomBetCard({ betId, bet, players, onSettle }) {
   );
 }
 
+// ── Skins bet card ───────────────────────────────────────────────────────────
+
+const FORMAT_LABEL_SK = {
+  fourball: 'Four-Ball', foursomes: 'Foursomes',
+  singles: 'Singles', yellowball: 'Yellow Ball',
+};
+
+function SkinsBetCard({ betId, bet, holeData, players, matches, rounds }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const result = useMemo(
+    () => computeSkinsResult(holeData, bet.players || [], bet.amount),
+    [holeData, bet],
+  );
+  const { holeResults, skinsWon, payouts, pendingCarryover } = result;
+
+  const totalSkins = Object.values(skinsWon).reduce((a, b) => a + b, 0);
+  const playedResults = holeResults.filter(r => r.status !== 'pending');
+  const holesPlayed = playedResults.length;
+
+  const match = matches[bet.matchId];
+  const round = match && rounds[match.roundId];
+
+  const sortedPlayers = [...(bet.players || [])].sort(
+    (a, b) => (skinsWon[b] || 0) - (skinsWon[a] || 0)
+  );
+
+  function fmtPayout(n) {
+    if (Math.abs(n) < 0.01) return 'Even';
+    const abs = Number.isInteger(Math.abs(n)) ? `$${Math.abs(n)}` : `$${Math.abs(n).toFixed(2)}`;
+    return n > 0 ? `+${abs}` : `-${abs}`;
+  }
+
+  return (
+    <div className={styles.skinsCard}>
+      {/* Header */}
+      <div className={styles.skinsHeader}>
+        <div className={styles.skinsHeaderLeft}>
+          <span className={styles.skinsTitle}>Skins · ${bet.amount}/skin</span>
+          {match && round && (
+            <Link to={`/match/${bet.matchId}`} className={styles.nassauMatchLink}>
+              Round {round.order}: {FORMAT_LABEL_SK[match.format] || match.format}
+            </Link>
+          )}
+        </div>
+        <span className={styles.skinsMeta}>{holesPlayed}/18 played</span>
+      </div>
+
+      {/* Player rows */}
+      <div className={styles.skinsPlayers}>
+        {sortedPlayers.map(pid => {
+          const skins = skinsWon[pid] || 0;
+          const payout = payouts[pid] || 0;
+          return (
+            <div key={pid} className={styles.skinsPlayerRow}>
+              <span className={styles.skinsPlayerName} style={{ color: teamColor(players, pid) }}>
+                {firstName(players, pid)}
+              </span>
+              <span className={styles.skinsDots}>
+                {Array.from({ length: Math.max(totalSkins, 1) }, (_, i) => (
+                  <span key={i} className={`${styles.skinsDot} ${i < skins ? styles.skinsDotFilled : ''}`} />
+                ))}
+              </span>
+              <span className={styles.skinsCount}>{skins} {skins === 1 ? 'skin' : 'skins'}</span>
+              <span className={`${styles.skinsPayout} ${payout > 0 ? styles.skinsPos : payout < 0 ? styles.skinsNeg : styles.skinsEven}`}>
+                {fmtPayout(payout)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Carryover banner */}
+      {pendingCarryover > 1 && (
+        <div className={styles.skinsCarry}>
+          🔥 {pendingCarryover} {pendingCarryover === 1 ? 'skin' : 'skins'} carrying
+        </div>
+      )}
+
+      {/* Expandable hole-by-hole */}
+      {holesPlayed > 0 && (
+        <button className={styles.skinsExpandBtn} onClick={() => setExpanded(e => !e)}>
+          {expanded ? '▲ Hide hole results' : `▼ Hole results (${holesPlayed} played)`}
+        </button>
+      )}
+
+      {expanded && (
+        <div className={styles.skinsHoleList}>
+          {holeResults.map(r => {
+            if (r.status === 'pending') return null;
+            const isCarry = r.status === 'tied';
+            return (
+              <div key={r.hole} className={`${styles.skinsHoleRow} ${isCarry ? styles.skinsHoleCarry : ''}`}>
+                <span className={styles.skinsHoleNum}>{r.hole}</span>
+                {isCarry ? (
+                  <span className={styles.skinsHoleStatus}>Tied — carry →</span>
+                ) : (
+                  <span className={styles.skinsHoleStatus} style={{ color: teamColor(players, r.winner) }}>
+                    {firstName(players, r.winner)} wins
+                  </span>
+                )}
+                <span className={styles.skinsHoleValue}>
+                  {r.skinsValue > 1 ? `${r.skinsValue} skins` : '1 skin'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Skins create form (rendered inside the modal) ───────────────────────────
+
+function SkinsCreateForm({ players, matches, rounds, playerId, onClose }) {
+  const [matchId, setMatchId] = useState('');
+  const [selectedPlayers, setSelectedPlayers] = useState([]);
+  const [amount, setAmount] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const activeMatches = Object.entries(matches)
+    .filter(([, m]) => m.status !== 'complete')
+    .sort(([, a], [, b]) => (rounds[a.roundId]?.order ?? 99) - (rounds[b.roundId]?.order ?? 99));
+
+  function handleMatchChange(mid) {
+    setMatchId(mid);
+    if (!mid || !matches[mid]) { setSelectedPlayers([]); return; }
+    const m = matches[mid];
+    const allIds = [...(m.teamA?.playerIds || []), ...(m.teamB?.playerIds || [])];
+    setSelectedPlayers(allIds);
+  }
+
+  function togglePlayer(pid) {
+    setSelectedPlayers(prev =>
+      prev.includes(pid) ? prev.filter(p => p !== pid) : [...prev, pid]
+    );
+  }
+
+  async function handleCreate() {
+    if (!matchId) { setError('Select a match.'); return; }
+    if (selectedPlayers.length < 2) { setError('Select at least 2 players.'); return; }
+    if (!amount || parseFloat(amount) <= 0) { setError('Enter a dollar amount per skin.'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      await push(ref(db, 'skinsBets'), {
+        matchId,
+        players: selectedPlayers,
+        amount: parseFloat(amount),
+        createdBy: playerId || 'unknown',
+        createdAt: Date.now(),
+        status: 'open',
+      });
+      onClose();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const playersInMatch = matchId && matches[matchId]
+    ? [...(matches[matchId].teamA?.playerIds || []), ...(matches[matchId].teamB?.playerIds || [])]
+    : [];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className={styles.formGroup}>
+        <label className={styles.formLabel}>Match</label>
+        <select className={styles.formInput} value={matchId} onChange={e => handleMatchChange(e.target.value)}>
+          <option value="">Select a match…</option>
+          {activeMatches.map(([mid, m]) => {
+            const r = rounds[m.roundId];
+            const allIds = [...(m.teamA?.playerIds || []), ...(m.teamB?.playerIds || [])];
+            const names = allIds.map(id => players[id]?.name?.split(' ')[0] || id).join(', ');
+            return <option key={mid} value={mid}>Round {r?.order ?? '?'} — {names}</option>;
+          })}
+        </select>
+      </div>
+
+      {playersInMatch.length > 0 && (
+        <div className={styles.formGroup}>
+          <label className={styles.formLabel}>Players competing</label>
+          <div className={styles.compCheckboxes}>
+            {playersInMatch.map(pid => (
+              <button
+                key={pid}
+                type="button"
+                className={`${styles.compBtn} ${selectedPlayers.includes(pid) ? styles.compBtnOn : ''}`}
+                onClick={() => togglePlayer(pid)}
+              >
+                {firstName(players, pid)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className={styles.formGroup}>
+        <label className={styles.formLabel}>$ Per skin</label>
+        <input
+          className={styles.formInput}
+          type="number" min="1" step="1" placeholder="e.g. 5"
+          value={amount} onChange={e => setAmount(e.target.value)}
+        />
+      </div>
+
+      {error && <p style={{ color: '#dc2626', fontSize: 14, margin: 0 }}>{error}</p>}
+
+      <button className={styles.submitBtn} onClick={handleCreate} disabled={loading}>
+        {loading ? 'Creating…' : 'Create Skins Bet'}
+      </button>
+    </div>
+  );
+}
+
 // ── Create bet modal ─────────────────────────────────────────────────────────
 
 const FORMAT_LABEL = {
@@ -414,6 +633,12 @@ function CreateBetModal({ players, matches, rounds, playerId, onClose, onCreated
             Nassau
           </button>
           <button
+            className={`${styles.modalTabBtn} ${tab === 'skins' ? styles.modalTabActive : ''}`}
+            onClick={() => { setTab('skins'); setError(''); }}
+          >
+            Skins
+          </button>
+          <button
             className={`${styles.modalTabBtn} ${tab === 'custom' ? styles.modalTabActive : ''}`}
             onClick={() => { setTab('custom'); setError(''); }}
           >
@@ -528,6 +753,16 @@ function CreateBetModal({ players, matches, rounds, playerId, onClose, onCreated
               {loading ? 'Creating…' : 'Create Nassau Bet'}
             </button>
           </>
+        )}
+
+        {tab === 'skins' && (
+          <SkinsCreateForm
+            players={players}
+            matches={matches}
+            rounds={rounds}
+            playerId={playerId}
+            onClose={onClose}
+          />
         )}
 
         {tab === 'custom' && (
@@ -692,6 +927,7 @@ function SettleModal({ betId, bet, players, playerId, onClose }) {
 export default function Bets({ playerId }) {
   const [nassauBets, setNassauBets] = useState({});
   const [customBets, setCustomBets] = useState({});
+  const [skinsBets, setSkinsBets] = useState({});
   const [presses, setPresses] = useState({});
   const [players, setPlayers] = useState({});
   const [matches, setMatches] = useState({});
@@ -703,12 +939,13 @@ export default function Bets({ playerId }) {
   useEffect(() => {
     const u1 = onValue(ref(db, 'nassauBets'), (s) => setNassauBets(s.val() || {}));
     const u2 = onValue(ref(db, 'customBets'), (s) => setCustomBets(s.val() || {}));
-    const u3 = onValue(ref(db, 'presses'), (s) => setPresses(s.val() || {}));
-    const u4 = onValue(ref(db, 'players'), (s) => setPlayers(s.val() || {}));
-    const u5 = onValue(ref(db, 'matches'), (s) => setMatches(s.val() || {}));
-    const u6 = onValue(ref(db, 'holes'), (s) => setAllHoles(s.val() || {}));
-    const u7 = onValue(ref(db, 'rounds'), (s) => setRounds(s.val() || {}));
-    return () => { u1(); u2(); u3(); u4(); u5(); u6(); u7(); };
+    const u3 = onValue(ref(db, 'skinsBets'), (s) => setSkinsBets(s.val() || {}));
+    const u4 = onValue(ref(db, 'presses'), (s) => setPresses(s.val() || {}));
+    const u5 = onValue(ref(db, 'players'), (s) => setPlayers(s.val() || {}));
+    const u6 = onValue(ref(db, 'matches'), (s) => setMatches(s.val() || {}));
+    const u7 = onValue(ref(db, 'holes'), (s) => setAllHoles(s.val() || {}));
+    const u8 = onValue(ref(db, 'rounds'), (s) => setRounds(s.val() || {}));
+    return () => { u1(); u2(); u3(); u4(); u5(); u6(); u7(); u8(); };
   }, []);
 
   // Running balances across all bets
@@ -738,6 +975,15 @@ export default function Bets({ playerId }) {
       });
     });
 
+    // Skins bets
+    Object.entries(skinsBets).forEach(([, bet]) => {
+      const holeData = allHoles[bet.matchId] || {};
+      const { payouts } = computeSkinsResult(holeData, bet.players || [], bet.amount);
+      Object.entries(payouts).forEach(([pid, delta]) => {
+        balances[pid] = (balances[pid] || 0) + delta;
+      });
+    });
+
     // Custom bets (settled only)
     Object.entries(customBets).forEach(([, bet]) => {
       if (bet.status !== 'settled') return;
@@ -755,7 +1001,7 @@ export default function Bets({ playerId }) {
       .filter(([pid]) => players[pid]) // only show known players
       .map(([pid, balance]) => ({ playerId: pid, balance }))
       .sort((a, b) => b.balance - a.balance);
-  }, [nassauBets, customBets, presses, allHoles, players]);
+  }, [nassauBets, customBets, skinsBets, presses, allHoles, players]);
 
   // Minimal cash transfers to settle all debts
   const settleUp = useMemo(() => {
@@ -779,6 +1025,7 @@ export default function Bets({ playerId }) {
   }, [playerBalances]);
 
   const nassauList = Object.entries(nassauBets).sort((a, b) => b[1].createdAt - a[1].createdAt);
+  const skinsList  = Object.entries(skinsBets).sort((a, b) => b[1].createdAt - a[1].createdAt);
   const customList = Object.entries(customBets).sort((a, b) => b[1].createdAt - a[1].createdAt);
 
   return (
@@ -846,6 +1093,26 @@ export default function Bets({ playerId }) {
               players={players}
               allPresses={presses}
               playerId={playerId}
+              matches={matches}
+              rounds={rounds}
+            />
+          ))
+        )}
+      </div>
+
+      {/* Skins Bets */}
+      <div className={styles.section}>
+        <div className={styles.sectionLabel}>Skins</div>
+        {skinsList.length === 0 ? (
+          <div className={styles.emptyNote}>No skins bets yet</div>
+        ) : (
+          skinsList.map(([betId, bet]) => (
+            <SkinsBetCard
+              key={betId}
+              betId={betId}
+              bet={bet}
+              holeData={allHoles[bet.matchId] || {}}
+              players={players}
               matches={matches}
               rounds={rounds}
             />

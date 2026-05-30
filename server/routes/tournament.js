@@ -96,6 +96,7 @@ router.post('/reset', async (req, res) => {
       nassauBets: null,
       customBets: null,
       presses: null,
+      skinsBets: null,
       course: null,
       activeSessions: null,
     });
