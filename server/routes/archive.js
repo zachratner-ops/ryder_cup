@@ -18,13 +18,17 @@ router.post('/', async (req, res) => {
     }
 
     // Read all data in parallel
-    const [tournSnap, playersSnap, roundsSnap, matchesSnap, holesSnap, lbSnap] = await Promise.all([
+    const [tournSnap, playersSnap, roundsSnap, matchesSnap, holesSnap, lbSnap,
+           nassauSnap, customSnap, pressSnap] = await Promise.all([
       db.ref('tournament').once('value'),
       db.ref('players').once('value'),
       db.ref('rounds').once('value'),
       db.ref('matches').once('value'),
       db.ref('holes').once('value'),
       db.ref('leaderboard').once('value'),
+      db.ref('nassauBets').once('value'),
+      db.ref('customBets').once('value'),
+      db.ref('presses').once('value'),
     ]);
 
     const tournament = tournSnap.val();
@@ -33,6 +37,9 @@ router.post('/', async (req, res) => {
     const matches = matchesSnap.val() || {};
     const holes = holesSnap.val() || {};
     const leaderboard = lbSnap.val() || {};
+    const nassauBets = nassauSnap.val() || {};
+    const customBets = customSnap.val() || {};
+    const presses = pressSnap.val() || {};
 
     if (!tournament?.name) {
       return res.status(400).json({ error: 'No tournament to archive' });
@@ -51,7 +58,7 @@ router.post('/', async (req, res) => {
         teamB_pts: leaderboard.rounds?.[roundId]?.teamB_pts ?? 0,
       }));
 
-    // Build matches summary
+    // Build matches summary — include per-hole results for scorecard display
     const matchesSummary = Object.entries(matches).map(([matchId, match]) => {
       const matchHoles = holes[matchId] || {};
 
@@ -62,6 +69,27 @@ router.post('/', async (req, res) => {
           finalStatus = matchHoles[h].matchStatus;
           break;
         }
+      }
+
+      // Compact hole results: just what's needed for the strip + nassau compute
+      const holeResults = {};
+      for (let h = 1; h <= 18; h++) {
+        const hd = matchHoles[h];
+        if (!hd) continue;
+        const entry = {};
+        if (hd.holeWinner != null) entry.holeWinner = hd.holeWinner;
+        if (hd.matchStatus != null) entry.matchStatus = hd.matchStatus;
+        if (hd.ybNetA != null) entry.ybNetA = hd.ybNetA;
+        if (hd.ybNetB != null) entry.ybNetB = hd.ybNetB;
+        // Per-player gross for Nassau computation
+        const allIds = [...(match.teamA?.playerIds || []), ...(match.teamB?.playerIds || [])];
+        for (const pid of allIds) {
+          if (hd[pid]?.gross != null) {
+            if (!entry[pid]) entry[pid] = {};
+            entry[pid].gross = hd[pid].gross;
+          }
+        }
+        holeResults[h] = entry;
       }
 
       const teamANames = (match.teamA?.playerIds || []).map(
@@ -75,10 +103,14 @@ router.post('/', async (req, res) => {
         matchId,
         roundId: match.roundId,
         format: match.format,
+        teamA: match.teamA,
+        teamB: match.teamB,
         teamAPlayerNames: teamANames,
         teamBPlayerNames: teamBNames,
+        strokeAllocation: match.strokeAllocation || {},
         result: match.result || null,
         finalStatus,
+        holeResults,
       };
     });
 
@@ -105,6 +137,9 @@ router.post('/', async (req, res) => {
       rounds: roundsSummary,
       matches: matchesSummary,
       players: playersSummary,
+      nassauBets,
+      customBets,
+      presses,
     };
 
     // Write archive

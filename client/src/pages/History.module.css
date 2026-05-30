@@ -317,6 +317,221 @@
   color: var(--text-muted);
 }
 
+/* ── Hole dot strip ──────────────────────────────── */
+
+.holeStrip {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.holeDot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dotA {
+  border-color: transparent;
+}
+
+.dotB {
+  border-color: transparent;
+}
+
+.dotHalf {
+  background: color-mix(in srgb, #888 30%, var(--surface2));
+  border-color: #aaa;
+}
+
+.dotEmpty {
+  background: var(--surface2);
+}
+
+.dotNum {
+  font-size: 7px;
+  font-weight: 700;
+  color: white;
+  line-height: 1;
+}
+
+.dotEmpty .dotNum {
+  color: var(--text-muted);
+}
+
+/* ── Balance board ───────────────────────────────── */
+
+.balanceBoard {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.balanceRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.balanceRow:last-child {
+  border-bottom: none;
+}
+
+.balanceName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.balanceAmt {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.balancePos { color: var(--green); }
+.balanceNeg { color: #dc2626; }
+.balanceEven { color: var(--text-muted); }
+
+/* ── Bet cards ───────────────────────────────────── */
+
+.betCard {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.betHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.betPlayers {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.betMeta {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.betSegment {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 0;
+  border-top: 1px solid var(--border);
+}
+
+.betSegLabel {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  min-width: 60px;
+  padding-top: 1px;
+}
+
+.betSegStatus {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  flex: 1;
+}
+
+.betSegWon {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.betSegPayout {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.payoutWin {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+}
+
+.payoutLose {
+  font-size: 12px;
+  font-weight: 700;
+  color: #dc2626;
+}
+
+/* ── Press rows ──────────────────────────────────── */
+
+.pressRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 0 5px 12px;
+  border-top: 1px solid var(--border);
+  border-left: 2px solid var(--border);
+  margin-left: 4px;
+}
+
+.pressLabel {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  min-width: 80px;
+  padding-top: 1px;
+}
+
+.pressStatus {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  flex: 1;
+}
+
+.pressDecided {
+  color: var(--green);
+  font-weight: 600;
+}
+
+/* ── Custom bet footer ───────────────────────────── */
+
+.customBetFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.betPlayers2 {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 /* ── Spacing ─────────────────────────────────────── */
 
 .bottomPad {
