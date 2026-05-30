@@ -8,6 +8,7 @@ const roundRoutes = require('./routes/rounds');
 const matchRoutes = require('./routes/matches');
 const seedRoutes = require('./routes/seed');
 const betRoutes = require('./routes/bets');
+const archiveRoutes = require('./routes/archive');
 
 const app = express();
 app.use(cors());
@@ -18,6 +19,7 @@ app.use('/api/rounds', roundRoutes);
 app.use('/api/matches', matchRoutes);
 app.use('/api/seed', seedRoutes);
 app.use('/api/bets', betRoutes);
+app.use('/api/archive', archiveRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

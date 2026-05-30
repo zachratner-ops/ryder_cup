@@ -132,8 +132,24 @@
   font-weight: 600;
 }
 
+.archiveBtn {
+  width: 100%;
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.archiveBtn:active {
+  background: var(--border);
+}
+
 .resetBtn {
-  margin-top: 12px;
+  margin-top: 8px;
   width: 100%;
   padding: 14px;
   border-radius: var(--radius);
@@ -142,4 +158,5 @@
   color: #dc2626;
   font-size: 14px;
   font-weight: 600;
+  cursor: pointer;
 }

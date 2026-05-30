@@ -18,6 +18,10 @@ export default function Nav({ playerId, players }) {
         <span className={styles.icon}>💰</span>
         <span>Bets</span>
       </NavLink>
+      <NavLink to="/history" className={({ isActive }) => isActive ? styles.active : ''}>
+        <span className={styles.icon}>📜</span>
+        <span>History</span>
+      </NavLink>
       <NavLink to="/profile" className={({ isActive }) => isActive ? styles.active : ''}>
         <span className={styles.icon}>👤</span>
         <span>{playerName || 'Profile'}</span>

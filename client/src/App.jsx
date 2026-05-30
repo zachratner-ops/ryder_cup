@@ -8,6 +8,7 @@ import Leaderboard from './pages/Leaderboard';
 import Match from './pages/Match';
 import Stats from './pages/Stats';
 import Bets from './pages/Bets';
+import History from './pages/History';
 import Admin from './pages/Admin';
 import Profile from './pages/Profile';
 import Nav from './components/Nav';
@@ -44,6 +45,8 @@ export default function App() {
         <Route path="/stats" element={<><Stats />{nav}</>} />
 
         <Route path="/bets" element={<><Bets playerId={playerId} />{nav}</>} />
+
+        <Route path="/history" element={<><History />{nav}</>} />
 
         <Route
           path="/profile"

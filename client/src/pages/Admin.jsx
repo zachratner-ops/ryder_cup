@@ -92,6 +92,23 @@ export default function Admin() {
     }
   }
 
+  async function handleArchive() {
+    if (!confirm('Archive this tournament and start fresh?\n\nResults will be saved to History, then all current data will be wiped.')) return;
+    const res = await fetch('/api/archive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminPin: pin, reset: true }),
+    });
+    if (res.ok) {
+      alert('Tournament archived! You can view it in the History tab.');
+      setAuthed(false);
+      setPin('');
+    } else {
+      const body = await res.json().catch(() => ({}));
+      alert('Archive failed: ' + (body.error || res.status));
+    }
+  }
+
   return (
     <div className={styles.page}>
       <div className={styles.header}>
@@ -105,8 +122,12 @@ export default function Admin() {
         <RoundManager tournament={tournament} adminPin={pin} />
       )}
 
+      <button className={styles.archiveBtn} onClick={handleArchive}>
+        📜 Archive &amp; Start New Tournament
+      </button>
+
       <button className={styles.resetBtn} onClick={handleReset}>
-        Reset Tournament
+        Reset Tournament (no archive)
       </button>
     </div>
   );
