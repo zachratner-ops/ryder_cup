@@ -1,0 +1,160 @@
+.skinsCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skinsHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.skinsHeaderLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.skinsTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.skinsMeta {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.skinsPlayers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skinsPlayerRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.skinsPlayerName {
+  font-size: 14px;
+  font-weight: 700;
+  min-width: 52px;
+}
+
+.skinsDots {
+  display: flex;
+  gap: 3px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.skinsDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.skinsDotFilled {
+  background: var(--accent);
+}
+
+.skinsCount {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 52px;
+  text-align: right;
+}
+
+.skinsPayout {
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 44px;
+  text-align: right;
+}
+
+.skinsPos { color: var(--green); }
+.skinsNeg { color: #dc2626; }
+.skinsEven { color: var(--text-muted); }
+
+.skinsCarry {
+  font-size: 12px;
+  font-weight: 600;
+  color: #b45309;
+  background: color-mix(in srgb, #f59e0b 12%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  text-align: center;
+}
+
+.skinsExpandBtn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 0;
+  text-align: left;
+}
+
+.skinsHoleList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+
+.skinsHoleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.skinsHoleRow:last-child {
+  border-bottom: none;
+}
+
+.skinsHoleCarry {
+  opacity: 0.6;
+}
+
+.skinsHoleNum {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  min-width: 20px;
+}
+
+.skinsHoleStatus {
+  flex: 1;
+  font-weight: 600;
+}
+
+.skinsHoleValue {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.matchLink {
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}

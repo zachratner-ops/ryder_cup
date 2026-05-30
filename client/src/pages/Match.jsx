@@ -12,7 +12,7 @@ import {
   canPress,
   formatSegmentStatus,
 } from '../nassauCompute';
-import { computeSkinsResult } from '../skinsCompute';
+import SkinsBetCard from '../components/SkinsBetCard';
 
 // ── helpers shared by MatchBetsTab ──────────────────────────────────────────
 
@@ -631,45 +631,14 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
       })}
 
       {/* Skins bets */}
-      {matchSkinsBets.map(([betId, bet]) => {
-        const skinsPids = bet.players || [];
-        const sh = bet.startHole ?? 1, eh = bet.endHole ?? 18;
-        const { holeResults, skinsWon, payouts, pendingCarryover } = computeSkinsResult(holeData, skinsPids, bet.amount, sh, eh);
-        const holesPlayed = holeResults.filter(r => r.status !== 'pending').length;
-        const totalSkins = Object.values(skinsWon).reduce((a, b) => a + b, 0);
-        const rangeLabel = sh === 1 && eh === 18 ? 'All 18' : `Holes ${sh}–${eh}`;
-        return (
-          <div key={betId} className={styles.customBetCard}>
-            <div className={styles.customBetHeader}>
-              <span className={styles.customBetDesc}>🎯 Skins · {rangeLabel}</span>
-              <span className={styles.customBetAmount}>${bet.amount}/skin</span>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 8 }}>
-              {skinsPids.map(pid => {
-                const skins = skinsWon[pid] || 0;
-                const payout = payouts[pid] || 0;
-                return (
-                  <div key={pid} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontWeight: 700, fontSize: 13, color: betTeamColor(players, pid) }}>
-                      {betFirstName(players, pid)}
-                    </span>
-                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{skins} {skins === 1 ? 'skin' : 'skins'}</span>
-                    {totalSkins > 0 && (
-                      <span style={{ fontSize: 13, fontWeight: 700, color: payout > 0 ? 'var(--green)' : payout < 0 ? '#dc2626' : 'var(--text-muted)' }}>
-                        {payout > 0 ? `+$${payout}` : payout < 0 ? `-$${Math.abs(payout)}` : '$0'}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
-              {holesPlayed}/{eh - sh + 1} played
-              {pendingCarryover > 1 && <span style={{ color: '#f59e0b', marginLeft: 8 }}>🔥 {pendingCarryover} carrying</span>}
-            </div>
-          </div>
-        );
-      })}
+      {matchSkinsBets.map(([betId, bet]) => (
+        <SkinsBetCard
+          key={betId}
+          bet={bet}
+          holeData={holeData}
+          players={players}
+        />
+      ))}
 
       {/* Press confirm overlay */}
       {confirmPress && (

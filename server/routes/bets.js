@@ -8,11 +8,46 @@ const { computeStrokeAllocation } = require('../strokeAllocation');
 // Creates a Nassau bet between two players in a match, computing head-to-head stroke allocation server-side.
 router.post('/nassau', async (req, res) => {
   try {
-    const { matchId, playerA, playerB, amount, createdBy, components } = req.body;
+    const { matchId, playerA, playerB, amount, createdBy, components, mode, teamAIds, teamBIds } = req.body;
 
     if (!matchId || !playerA || !playerB || amount == null || !createdBy) {
       return res.status(400).json({ error: 'Missing required fields: matchId, playerA, playerB, amount, createdBy' });
     }
+
+    const DEFAULT_COMPONENTS = [
+      { label: 'Front 9', startHole: 1, endHole: 9 },
+      { label: 'Back 9', startHole: 10, endHole: 18 },
+      { label: 'Overall', startHole: 1, endHole: 18 },
+    ];
+
+    const resolvedComponents = (Array.isArray(components) && components.length) ? components : DEFAULT_COMPONENTS;
+
+    // 2v2 mode: computation uses holeWinner, no player lookup or stroke allocation needed
+    if (mode === '2v2') {
+      const matchSnap = await db.ref(`matches/${matchId}`).once('value');
+      if (!matchSnap.val()) return res.status(404).json({ error: `Match ${matchId} not found` });
+
+      const newBet = {
+        matchId,
+        mode: '2v2',
+        playerA: 'teamA',
+        playerB: 'teamB',
+        teamAIds: teamAIds || [],
+        teamBIds: teamBIds || [],
+        amount: parseFloat(amount),
+        strokeAllocation: {},
+        components: resolvedComponents,
+        createdBy,
+        createdAt: Date.now(),
+        status: 'active',
+      };
+
+      const betRef = db.ref('nassauBets').push();
+      await betRef.set(newBet);
+      return res.json({ ok: true, betId: betRef.key });
+    }
+
+    // 1v1 mode: look up players and compute stroke allocation
     if (playerA === playerB) {
       return res.status(400).json({ error: 'playerA and playerB must be different' });
     }
@@ -38,7 +73,6 @@ router.post('/nassau', async (req, res) => {
       ...data,
     }));
 
-    // Head-to-head stroke allocation using 'singles' format (lower hcp plays scratch, other gets diff)
     const strokeAllocation = computeStrokeAllocation(
       [
         { id: playerA, handicap: pA.handicap || 0 },
@@ -48,20 +82,13 @@ router.post('/nassau', async (req, res) => {
       'singles'
     );
 
-    // Default to all three components if none specified
-    const DEFAULT_COMPONENTS = [
-      { label: 'Front 9', startHole: 1, endHole: 9 },
-      { label: 'Back 9', startHole: 10, endHole: 18 },
-      { label: 'Overall', startHole: 1, endHole: 18 },
-    ];
-
     const newBet = {
       matchId,
       playerA,
       playerB,
       amount: parseFloat(amount),
       strokeAllocation,
-      components: (Array.isArray(components) && components.length) ? components : DEFAULT_COMPONENTS,
+      components: resolvedComponents,
       createdBy,
       createdAt: Date.now(),
       status: 'active',
