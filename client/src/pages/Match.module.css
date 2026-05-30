@@ -362,6 +362,44 @@
   color: #b45309;
 }
 
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+}
+
+.sheet {
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  padding: 12px 20px 36px;
+  width: 100%;
+  max-height: 88vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sheetHandle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  margin: 0 auto 4px;
+  flex-shrink: 0;
+}
+
+.sheetTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+  flex-shrink: 0;
+}
+
 .savedBanner {
   background: var(--green);
   color: white;

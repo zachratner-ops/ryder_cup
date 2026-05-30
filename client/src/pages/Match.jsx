@@ -547,10 +547,13 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
         </div>
       )}
 
-      {/* Create bet sheet */}
+      {/* Create bet modal */}
       {showCreate && (
-        <div style={{ marginTop: 16 }}>
-          <div className={styles.ybTabs} style={{ marginBottom: 14 }}>
+        <div className={styles.overlay} onClick={() => { setShowCreate(false); setCreateError(''); }}>
+        <div className={styles.sheet} onClick={e => e.stopPropagation()}>
+          <div className={styles.sheetHandle} />
+          <div className={styles.sheetTitle}>Add Bet</div>
+          <div className={styles.ybTabs} style={{ marginBottom: 2 }}>
             <button
               className={`${styles.ybTabBtn} ${createTab === 'nassau' ? styles.ybTabActive : ''}`}
               style={createTab === 'nassau' ? { color: 'var(--accent)', borderColor: 'var(--accent)' } : {}}
@@ -711,6 +714,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, allP
           >
             Cancel
           </button>
+        </div>
         </div>
       )}
     </div>
