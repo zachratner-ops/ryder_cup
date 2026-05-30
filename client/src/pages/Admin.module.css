@@ -37,7 +37,7 @@
 
 .loginForm {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 10px;
   width: 100%;
 }
@@ -46,12 +46,15 @@
   background: var(--surface);
   border: 1.5px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px;
-  font-size: 24px;
+  padding: 14px 12px;
+  font-size: 20px;
   text-align: center;
-  letter-spacing: 8px;
-  width: 100%;
+  letter-spacing: 6px;
+  width: 0;
+  flex: 1;
+  min-width: 0;
   color: var(--text);
+  box-sizing: border-box;
 }
 
 .pinInput:focus {
@@ -63,10 +66,11 @@
   background: var(--teamA);
   color: white;
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 14px 20px;
   font-size: 17px;
   font-weight: 700;
-  width: 100%;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .error {
