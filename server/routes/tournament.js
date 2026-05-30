@@ -2,6 +2,12 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../firebase');
 
+function defaultMatchCount(format) {
+  if (format === 'yellowball') return 1;
+  if (format === 'singles') return 4;
+  return 2; // fourball, foursomes
+}
+
 // POST /api/tournament/setup
 // Body: { name, adminPin, teamA: {name, color}, teamB: {name, color},
 //         players: [{id, name, teamId, handicap}],
@@ -39,6 +45,7 @@ router.post('/setup', async (req, res) => {
       updates[`rounds/${round.id}`] = {
         format: round.format,
         pointsValue: round.pointsValue,
+        matchCount: round.matchCount || defaultMatchCount(round.format),
         order: round.order,
         status: 'setup',
       };
@@ -46,7 +53,10 @@ router.post('/setup', async (req, res) => {
 
     updates['leaderboard/teamA_pts'] = 0;
     updates['leaderboard/teamB_pts'] = 0;
-    updates['leaderboard/ptsAvailable'] = rounds.reduce((s, r) => s + r.pointsValue, 0);
+    updates['leaderboard/ptsAvailable'] = rounds.reduce(
+      (s, r) => s + r.pointsValue * (r.matchCount || defaultMatchCount(r.format)),
+      0
+    );
     updates['leaderboard/lastUpdated'] = Date.now();
 
     await db.ref().update(updates);

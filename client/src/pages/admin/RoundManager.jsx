@@ -27,11 +27,19 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
   // Edit fields for a setup round
   const [editFormat, setEditFormat] = useState('fourball');
   const [editPoints, setEditPoints] = useState('1');
+  const [editMatchCount, setEditMatchCount] = useState('2');
 
   // Add-round form
   const [showAdd, setShowAdd] = useState(false);
   const [addFormat, setAddFormat] = useState('fourball');
   const [addPoints, setAddPoints] = useState('1');
+  const [addMatchCount, setAddMatchCount] = useState('2');
+
+  function defaultMatchCount(format) {
+    if (format === 'yellowball') return 1;
+    if (format === 'singles') return 4;
+    return 2;
+  }
 
   useEffect(() => {
     const u1 = onValue(ref(db, 'rounds'), (s) => {
@@ -58,6 +66,7 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
     if (round) {
       setEditFormat(round.format || 'fourball');
       setEditPoints(String(round.pointsValue ?? 1));
+      setEditMatchCount(String(round.matchCount ?? defaultMatchCount(round.format)));
     }
   }, [selectedRound, rounds]);
 
@@ -141,6 +150,7 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
     const result = await call(`/api/rounds/${selectedRound}/update`, {
       format: editFormat,
       pointsValue: parseFloat(editPoints) || 1,
+      matchCount: editFormat === 'yellowball' ? 1 : (parseInt(editMatchCount) || defaultMatchCount(editFormat)),
     }, 'Round updated.');
     if (result) setView('manage');
   }
@@ -158,6 +168,7 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
     const result = await call('/api/rounds/add', {
       format: addFormat,
       pointsValue: parseFloat(addPoints) || 1,
+      matchCount: addFormat === 'yellowball' ? 1 : (parseInt(addMatchCount) || defaultMatchCount(addFormat)),
     }, 'Round added!');
     if (result?.roundId) {
       setSelectedRound(result.roundId);
@@ -198,11 +209,16 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
           <div className={styles.roundRow}>
             <select
               value={addFormat}
-              onChange={(e) => setAddFormat(e.target.value)}
+              onChange={(e) => {
+                setAddFormat(e.target.value);
+                setAddMatchCount(String(defaultMatchCount(e.target.value)));
+              }}
               className={styles.formatSelect}
             >
               {FORMATS.map((f) => <option key={f} value={f}>{FORMAT_LABELS[f]}</option>)}
             </select>
+          </div>
+          <div className={styles.roundRow}>
             <input
               type="number"
               min="0.5"
@@ -211,7 +227,19 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
               onChange={(e) => setAddPoints(e.target.value)}
               className={styles.ptsInput}
             />
-            <span className={styles.ptsLabel}>pts</span>
+            <span className={styles.ptsLabel}>pts/match ×</span>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={addMatchCount}
+              disabled={addFormat === 'yellowball'}
+              onChange={(e) => setAddMatchCount(e.target.value)}
+              className={styles.ptsInput}
+            />
+            <span className={styles.ptsLabel}>
+              = {((parseFloat(addPoints) || 1) * (parseInt(addMatchCount) || 1)).toFixed(1).replace(/\.0$/, '')} pts
+            </span>
           </div>
           {!propPin && (
             <>
@@ -241,7 +269,9 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
             <div>
               <div className={styles.format}>{FORMAT_LABELS[round.format] || round.format}</div>
               <div className={styles.roundMetaSub}>
-                <span className={styles.ptsChip}>{round.pointsValue} pt{round.pointsValue !== 1 ? 's' : ''}</span>
+                <span className={styles.ptsChip}>
+                  {round.matchCount ?? defaultMatchCount(round.format)} matches · {round.pointsValue} pt{round.pointsValue !== 1 ? 's' : ''}/match
+                </span>
                 <span className={`${styles.status} ${round.status === 'active' ? styles.live : ''}`}>{round.status}</span>
               </div>
             </div>
@@ -266,13 +296,25 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
                 {FORMATS.map((f) => <option key={f} value={f}>{FORMAT_LABELS[f]}</option>)}
               </select>
 
-              <label>Points value</label>
+              <label>Pts per match</label>
               <input
                 type="number"
                 min="0.5"
                 step="0.5"
                 value={editPoints}
                 onChange={(e) => setEditPoints(e.target.value)}
+                className={styles.ptsInput}
+                style={{ width: '100px' }}
+              />
+
+              <label>Number of matches</label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={editMatchCount}
+                disabled={editFormat === 'yellowball'}
+                onChange={(e) => setEditMatchCount(e.target.value)}
                 className={styles.ptsInput}
                 style={{ width: '100px' }}
               />

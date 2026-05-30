@@ -14,10 +14,16 @@ const DEFAULT_PLAYERS = [
   { name: '', teamId: 'teamB', handicap: '' },
 ];
 
+function defaultMatchCount(format) {
+  if (format === 'yellowball') return 1;
+  if (format === 'singles') return 4;
+  return 2; // fourball, foursomes
+}
+
 const DEFAULT_ROUNDS = [
-  { format: 'fourball', pointsValue: 1 },
-  { format: 'fourball', pointsValue: 1 },
-  { format: 'singles', pointsValue: 2 },
+  { format: 'fourball', pointsValue: 1, matchCount: 2 },
+  { format: 'fourball', pointsValue: 1, matchCount: 2 },
+  { format: 'singles', pointsValue: 1, matchCount: 4 },
 ];
 
 export default function TournamentSetup() {
@@ -98,6 +104,7 @@ export default function TournamentSetup() {
           id: `round${i + 1}`,
           format: r.format,
           pointsValue: parseFloat(r.pointsValue) || 1,
+          matchCount: r.format === 'yellowball' ? 1 : (parseInt(r.matchCount) || defaultMatchCount(r.format)),
           order: i + 1,
         })),
       };
@@ -196,17 +203,45 @@ export default function TournamentSetup() {
       {step === 4 && (
         <div className={styles.section}>
           {rounds.map((r, i) => (
-            <div key={i} className={styles.roundRow}>
-              <span className={styles.roundNum}>Round {i + 1}</span>
-              <select value={r.format} onChange={(e) => setRounds((prev) => { const n = [...prev]; n[i] = { ...n[i], format: e.target.value }; return n; })}>
-                {FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}
-              </select>
-              <input type="number" min="0.5" step="0.5" value={r.pointsValue} onChange={(e) => setRounds((prev) => { const n = [...prev]; n[i] = { ...n[i], pointsValue: e.target.value }; return n; })} className={styles.ptsInput} />
-              <span className={styles.ptsLabel}>pts</span>
-              <button className={styles.removeRound} onClick={() => setRounds((p) => p.filter((_, j) => j !== i))}>✕</button>
+            <div key={i} className={styles.roundBlock}>
+              <div className={styles.roundRow}>
+                <span className={styles.roundNum}>Round {i + 1}</span>
+                <select
+                  value={r.format}
+                  onChange={(e) => setRounds((prev) => {
+                    const n = [...prev];
+                    const fmt = e.target.value;
+                    n[i] = { ...n[i], format: fmt, matchCount: defaultMatchCount(fmt) };
+                    return n;
+                  })}
+                >
+                  {FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}
+                </select>
+                <button className={styles.removeRound} onClick={() => setRounds((p) => p.filter((_, j) => j !== i))}>✕</button>
+              </div>
+              <div className={styles.roundRowSub}>
+                <label className={styles.subLabel}>Pts/match</label>
+                <input
+                  type="number" min="0.5" step="0.5"
+                  value={r.pointsValue}
+                  onChange={(e) => setRounds((prev) => { const n = [...prev]; n[i] = { ...n[i], pointsValue: e.target.value }; return n; })}
+                  className={styles.ptsInput}
+                />
+                <label className={styles.subLabel}>Matches</label>
+                <input
+                  type="number" min="1" step="1"
+                  value={r.matchCount ?? defaultMatchCount(r.format)}
+                  disabled={r.format === 'yellowball'}
+                  onChange={(e) => setRounds((prev) => { const n = [...prev]; n[i] = { ...n[i], matchCount: parseInt(e.target.value) || 1 }; return n; })}
+                  className={styles.ptsInput}
+                />
+                <span className={styles.ptsLabel}>
+                  = {((parseFloat(r.pointsValue) || 1) * (r.matchCount ?? defaultMatchCount(r.format))).toFixed(1).replace(/\.0$/, '')} pts total
+                </span>
+              </div>
             </div>
           ))}
-          <button className={styles.addRound} onClick={() => setRounds((p) => [...p, { format: 'fourball', pointsValue: 1 }])}>+ Add round</button>
+          <button className={styles.addRound} onClick={() => setRounds((p) => [...p, { format: 'fourball', pointsValue: 1, matchCount: 2 }])}>+ Add round</button>
           <button className={styles.submitBtn} onClick={submit} disabled={saving}>
             {saving ? 'Creating…' : 'Create Tournament'}
           </button>

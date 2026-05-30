@@ -159,11 +159,18 @@ router.post('/:roundId/close', async (req, res) => {
   }
 });
 
-// pointsValue is per-match; this maps format → number of matches in a round
-function matchCountForFormat(format) {
-  if (format === 'singles') return 4;
+// Default match count when not explicitly stored on the round
+function defaultMatchCount(format) {
   if (format === 'yellowball') return 1;
+  if (format === 'singles') return 4;
   return 2; // fourball, foursomes
+}
+
+// pointsValue is per-match; read stored matchCount if present, else fall back to format default
+function roundTotalPts(r) {
+  const perMatch = parseFloat(r.pointsValue) || 0;
+  const count = r.matchCount != null ? r.matchCount : defaultMatchCount(r.format);
+  return perMatch * count;
 }
 
 // Helper: recalculate ptsAvailable from all rounds minus already-awarded points
@@ -176,16 +183,16 @@ async function recalcPtsAvailable(extraRounds = {}) {
   const lb = lbSnap.val() || {};
   const totalRoundPts = Object.values(rounds)
     .filter((r) => r !== null)
-    .reduce((sum, r) => sum + (parseFloat(r.pointsValue) || 0) * matchCountForFormat(r.format), 0);
+    .reduce((sum, r) => sum + roundTotalPts(r), 0);
   const awarded = (lb.teamA_pts || 0) + (lb.teamB_pts || 0);
   return Math.max(0, totalRoundPts - awarded);
 }
 
 // POST /api/rounds/add
-// Body: { adminPin, format, pointsValue }
+// Body: { adminPin, format, pointsValue, matchCount? }
 router.post('/add', async (req, res) => {
   try {
-    const { adminPin, format, pointsValue } = req.body;
+    const { adminPin, format, pointsValue, matchCount } = req.body;
     const tournSnap = await db.ref('tournament').once('value');
     if (tournSnap.val().adminPin !== adminPin) return res.status(403).json({ error: 'Bad PIN' });
 
@@ -195,8 +202,12 @@ router.post('/add', async (req, res) => {
     const newOrder = maxOrder + 1;
     const newRoundId = `round${newOrder}_${Date.now()}`;
     const pts = parseFloat(pointsValue) || 1;
+    const fmt = format || 'fourball';
+    const count = (matchCount != null && format !== 'yellowball')
+      ? parseInt(matchCount) || defaultMatchCount(fmt)
+      : defaultMatchCount(fmt);
 
-    const newRound = { format: format || 'fourball', pointsValue: pts, order: newOrder, status: 'setup' };
+    const newRound = { format: fmt, pointsValue: pts, matchCount: count, order: newOrder, status: 'setup' };
     const updates = {};
     updates[`rounds/${newRoundId}`] = newRound;
     updates['leaderboard/ptsAvailable'] = await recalcPtsAvailable({ [newRoundId]: newRound });
@@ -210,11 +221,11 @@ router.post('/add', async (req, res) => {
 });
 
 // POST /api/rounds/:roundId/update
-// Body: { adminPin, format, pointsValue }
+// Body: { adminPin, format, pointsValue, matchCount? }
 router.post('/:roundId/update', async (req, res) => {
   try {
     const { roundId } = req.params;
-    const { adminPin, format, pointsValue } = req.body;
+    const { adminPin, format, pointsValue, matchCount } = req.body;
 
     const tournSnap = await db.ref('tournament').once('value');
     if (tournSnap.val().adminPin !== adminPin) return res.status(403).json({ error: 'Bad PIN' });
@@ -225,10 +236,14 @@ router.post('/:roundId/update', async (req, res) => {
     if (round.status !== 'setup') return res.status(400).json({ error: 'Can only edit rounds in setup status' });
 
     const pts = parseFloat(pointsValue) || 1;
-    const updatedRound = { ...round, format, pointsValue: pts };
+    const count = (matchCount != null && format !== 'yellowball')
+      ? parseInt(matchCount) || defaultMatchCount(format)
+      : defaultMatchCount(format);
+    const updatedRound = { ...round, format, pointsValue: pts, matchCount: count };
     const updates = {};
     updates[`rounds/${roundId}/format`] = format;
     updates[`rounds/${roundId}/pointsValue`] = pts;
+    updates[`rounds/${roundId}/matchCount`] = count;
     updates['leaderboard/ptsAvailable'] = await recalcPtsAvailable({ [roundId]: updatedRound });
 
     await db.ref().update(updates);
