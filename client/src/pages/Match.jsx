@@ -51,6 +51,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
   const [nassauMode, setNassauMode] = useState('1v1'); // '1v1' | '2v2'
   const [newOpponent, setNewOpponent] = useState('');
   const [newAmount, setNewAmount] = useState('');
+  const [pressThreshold, setPressThreshold] = useState(2);
   const [newCompFront, setNewCompFront] = useState(true);
   const [newCompBack, setNewCompBack] = useState(true);
   const [newCompOverall, setNewCompOverall] = useState(true);
@@ -178,6 +179,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
             teamBIds: match?.teamB?.playerIds || [],
             amount: parseFloat(newAmount),
             components,
+            pressThreshold,
             createdBy: myId || 'admin',
           }),
         });
@@ -225,6 +227,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
           playerB: newOpponent,
           amount: parseFloat(newAmount),
           components,
+          pressThreshold,
           createdBy: myId || 'admin',
         }),
       });
@@ -329,7 +332,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
     const isPlayerB = nassauBet.playerB === playerId;
     if (!isPlayerA && !isPlayerB) return null;
 
-    if (!canPress(segStatus, isPlayerA, startHole, endHole)) return null;
+    if (!canPress(segStatus, isPlayerA, startHole, endHole, nassauBet.pressThreshold ?? 2)) return null;
 
     const pressStart = nextPressStartHole(holeData, nassauBet.playerA, nassauBet.playerB, startHole, endHole);
     if (pressStart > endHole) return null;
@@ -429,7 +432,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
             <span className={styles.nassauVs}>vs</span>
             <span style={{ color: colorB }}>{nameB}</span>
           </div>
-          <div className={styles.nassauMeta}>${bet.amount}/comp{is2v2 ? ' · 2v2' : ''}</div>
+          <div className={styles.nassauMeta}>${bet.amount}/comp{is2v2 ? ' · 2v2' : ''} · press {bet.pressThreshold ?? 2}-down</div>
         </div>
 
         <div className={styles.nassauSegments}>
@@ -767,6 +770,26 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
                     />
                   </div>
                 )}
+              </div>
+              <div>
+                <div className={styles.sectionLabel}>Press when down</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {[1, 2, 3].map(n => (
+                    <button
+                      key={n}
+                      type="button"
+                      style={{
+                        flex: 1, padding: '9px 0', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                        border: `1.5px solid ${pressThreshold === n ? 'var(--accent)' : 'var(--border)'}`,
+                        background: pressThreshold === n ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'var(--surface2)',
+                        color: pressThreshold === n ? 'var(--accent)' : 'var(--text-muted)',
+                      }}
+                      onClick={() => setPressThreshold(n)}
+                    >
+                      {n}-down
+                    </button>
+                  ))}
+                </div>
               </div>
               <div>
                 <div className={styles.sectionLabel}>$ Per Component</div>

@@ -97,23 +97,22 @@ export function computeNassauPayout(componentStatuses, bet) {
 
 /**
  * Whether the presser is allowed to press a given segment or press.
- * They must be at least 2-down and there must be holes remaining.
  *
  * @param {object} segStatus - result of computeSegmentStatus
  * @param {boolean} presserIsPlayerA - is the player who wants to press playerA?
  * @param {number} startHole - start of the parent segment
  * @param {number} endHole   - end of the parent segment
+ * @param {number} threshold - holes-down required to press (default 2)
  * @returns {boolean}
  */
-export function canPress(segStatus, presserIsPlayerA, startHole, endHole) {
+export function canPress(segStatus, presserIsPlayerA, startHole, endHole, threshold = 2) {
   if (segStatus.winner !== 'incomplete') return false; // already decided
   const totalHoles = endHole - startHole + 1;
   const remaining = totalHoles - segStatus.holesPlayed;
   if (remaining <= 0) return false;
 
-  // presser must be 2-down (diff is from playerA's perspective)
   const presserDiff = presserIsPlayerA ? segStatus.diff : -segStatus.diff;
-  return presserDiff <= -2;
+  return presserDiff <= -threshold;
 }
 
 /**
