@@ -759,7 +759,6 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
               </div>
               )}
               <div>
-              <div>
                 <div className={styles.sectionLabel}>Components</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {[
