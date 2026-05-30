@@ -132,6 +132,17 @@
   font-weight: 600;
 }
 
+.activeRoundWarning {
+  font-size: 13px;
+  font-weight: 600;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  text-align: center;
+}
+
 .archiveBtn {
   width: 100%;
   padding: 14px;

@@ -10,11 +10,15 @@ export default function Admin() {
   const [authed, setAuthed] = useState(false);
   const [error, setError] = useState('');
   const [tournament, setTournament] = useState(null);
+  const [rounds, setRounds] = useState({});
 
   useEffect(() => {
-    const u = onValue(ref(db, 'tournament'), (s) => setTournament(s.val()));
-    return u;
+    const u1 = onValue(ref(db, 'tournament'), (s) => setTournament(s.val()));
+    const u2 = onValue(ref(db, 'rounds'), (s) => setRounds(s.val() || {}));
+    return () => { u1(); u2(); };
   }, []);
+
+  const hasActiveRound = Object.values(rounds).some((r) => r.status === 'active');
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -78,7 +82,7 @@ export default function Admin() {
   }
 
   async function handleReset() {
-    if (!confirm('Reset tournament? This deletes ALL data and cannot be undone.')) return;
+    if (!confirm('Reset tournament? This deletes all data and cannot be undone.')) return;
     const res = await fetch('/api/tournament/reset', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -122,11 +126,25 @@ export default function Admin() {
         <RoundManager tournament={tournament} adminPin={pin} />
       )}
 
-      <button className={styles.archiveBtn} onClick={handleArchive}>
+      {hasActiveRound && (
+        <div className={styles.activeRoundWarning}>
+          ⚠️ Close active round before resetting
+        </div>
+      )}
+
+      <button
+        className={styles.archiveBtn}
+        onClick={handleArchive}
+        disabled={hasActiveRound}
+      >
         📜 Archive &amp; Start New Tournament
       </button>
 
-      <button className={styles.resetBtn} onClick={handleReset}>
+      <button
+        className={styles.resetBtn}
+        onClick={handleReset}
+        disabled={hasActiveRound}
+      >
         Reset Tournament (no archive)
       </button>
     </div>
