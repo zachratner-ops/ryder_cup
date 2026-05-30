@@ -120,12 +120,17 @@ export default function Leaderboard({ playerId }) {
     return 'empty';
   }
 
-  function getSubSegs(state) {
+  function getSubSegs(state, i) {
+    // For half-point slots the "open" sub-segment should match whatever
+    // colour would immediately follow — live projection or empty — so
+    // there is no white gap between the half-point bar and its neighbour.
+    const rightOfAHalf = i < liveAEnd ? styles.segLiveA : styles.segEmpty;
+    const leftOfBHalf  = i >= liveBStart ? styles.segLiveB : styles.segEmpty;
     switch (state) {
       case 'A':      return [styles.segA, styles.segA];
-      case 'A-half': return [styles.segA, styles.segEmpty];
+      case 'A-half': return [styles.segA, rightOfAHalf];
       case 'B':      return [styles.segB, styles.segB];
-      case 'B-half': return [styles.segEmpty, styles.segB];
+      case 'B-half': return [leftOfBHalf, styles.segB];
       case 'liveA':  return [styles.segLiveA, styles.segLiveA];
       case 'liveB':  return [styles.segLiveB, styles.segLiveB];
       default:       return [styles.segEmpty, styles.segEmpty];
@@ -166,7 +171,7 @@ export default function Leaderboard({ playerId }) {
           <TeamLogo teamId="teamA" size={44} />
           <div className={styles.barTrack}>
             {Array.from({ length: numSlots }, (_, i) => {
-              const [leftCls, rightCls] = getSubSegs(getSlotState(i));
+              const [leftCls, rightCls] = getSubSegs(getSlotState(i), i);
               return (
                 <div key={i} className={styles.pointGroup}>
                   <div className={`${styles.seg} ${leftCls}`} />
