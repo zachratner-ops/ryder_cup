@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { ref, onValue } from 'firebase/database';
 import { db } from '../firebase';
 import styles from './Profile.module.css';
@@ -122,6 +122,20 @@ export default function Profile({ playerId, isAdmin, onSelect, onClear, onActiva
             {skError && <div className={styles.skError}>{skError}</div>}
           </form>
         )}
+      </div>
+
+      <div className={styles.section}>
+        <div className={styles.sectionLabel}>More</div>
+        <Link to="/history" className={styles.menuLink}>
+          <span className={styles.menuIcon}>📜</span>
+          <span>Tournament History</span>
+          <span className={styles.menuChevron}>›</span>
+        </Link>
+        <Link to="/admin" className={styles.menuLink}>
+          <span className={styles.menuIcon}>⚙️</span>
+          <span>Admin Panel</span>
+          <span className={styles.menuChevron}>›</span>
+        </Link>
       </div>
 
       <button className={styles.spectateBtn} onClick={handleSpectate}>

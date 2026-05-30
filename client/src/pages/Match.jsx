@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ref, onValue, set, update, push } from 'firebase/database';
 import { db } from '../firebase';
+import { enqueue, dequeueAll, removeById, getQueueLength } from '../offlineQueue';
 import TeamLogo from '../components/TeamLogo';
 import styles from './Match.module.css';
 import {
@@ -759,7 +760,10 @@ export default function Match({ playerId, isAdmin }) {
   const [customBets, setCustomBets] = useState({});
   const [entry, setEntry] = useState({ gross: '', fairwayHit: null, gir: false, putts: '' });
   const [justSaved, setJustSaved] = useState(false);
+  // syncState: null | 'saving' | 'synced' | { pending: number }
+  const [syncState, setSyncState] = useState(null);
   const initialJumped = useRef(false);
+  const computeWinnerRef = useRef(null);
 
   useEffect(() => {
     const u1 = onValue(ref(db, `matches/${matchId}`), (s) => setMatch(s.val()));
@@ -831,6 +835,44 @@ export default function Match({ playerId, isAdmin }) {
     // holeData intentionally omitted: we don't want live score updates resetting the form
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, entryForId, currentHole, courseHoles]);
+
+  // Keep ref to computeAndWriteHoleWinner current so the online handler can call it
+  useEffect(() => {
+    computeWinnerRef.current = computeAndWriteHoleWinner;
+  });
+
+  // Check for stale offline writes on mount
+  useEffect(() => {
+    getQueueLength().then(len => { if (len > 0) setSyncState({ pending: len }); });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Flush offline queue when connectivity restores
+  useEffect(() => {
+    async function handleOnline() {
+      const pending = await dequeueAll();
+      if (!pending.length) return;
+      setSyncState('saving');
+      const flushedHoles = new Set();
+      for (const item of pending) {
+        try {
+          await set(ref(db, item.path), item.value);
+          await removeById(item.id);
+          const holeNum = parseInt(item.path.split('/')[2]);
+          if (!isNaN(holeNum)) flushedHoles.add(holeNum);
+        } catch {
+          setSyncState({ pending: await getQueueLength() });
+          return;
+        }
+      }
+      for (const h of flushedHoles) {
+        try { await computeWinnerRef.current?.(h); } catch {}
+      }
+      setSyncState('synced');
+      setTimeout(() => setSyncState(null), 2000);
+    }
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!match) return <div className={styles.loading}>Loading match…</div>;
 
@@ -978,16 +1020,39 @@ export default function Match({ playerId, isAdmin }) {
 
   async function submitHole() {
     if (!gross || !effectivePlayerId) return;
-    const holeRef = ref(db, `holes/${matchId}/${currentHole}/${effectivePlayerId}`);
-    await set(holeRef, {
+    const scoreData = {
       gross,
       net,
       fairwayHit: isPar3 ? null : entry.fairwayHit,
       gir: entry.gir,
       putts: entry.putts !== '' ? parseInt(entry.putts) : null,
-    });
+    };
 
-    await computeAndWriteHoleWinner(currentHole);
+    // Optimistic local update so scorecard reflects the entry immediately
+    setHoleData(prev => ({
+      ...prev,
+      [currentHole]: { ...(prev[currentHole] || {}), [effectivePlayerId]: scoreData },
+    }));
+
+    const path = `holes/${matchId}/${currentHole}/${effectivePlayerId}`;
+
+    if (navigator.onLine) {
+      setSyncState('saving');
+      try {
+        await set(ref(db, path), scoreData);
+        await computeAndWriteHoleWinner(currentHole);
+        setSyncState('synced');
+        setTimeout(() => setSyncState(null), 2000);
+      } catch {
+        await enqueue(path, scoreData);
+        const pending = await getQueueLength();
+        setSyncState({ pending });
+      }
+    } else {
+      await enqueue(path, scoreData);
+      const pending = await getQueueLength();
+      setSyncState({ pending });
+    }
 
     setJustSaved(true);
     setTimeout(() => {
@@ -1449,6 +1514,18 @@ export default function Match({ playerId, isAdmin }) {
               </button>
             ))}
           </div>
+
+          {syncState && !justSaved && (
+            <div className={`${styles.syncIndicator} ${
+              syncState === 'saving' ? styles.syncSaving
+              : syncState === 'synced' ? styles.syncSynced
+              : styles.syncPending
+            }`}>
+              {syncState === 'saving' ? '↑ Saving…'
+               : syncState === 'synced' ? '✓ Synced'
+               : `Offline · ${syncState.pending} pending`}
+            </div>
+          )}
 
           {justSaved ? (
             <div className={styles.savedBanner}>✓ Saved!</div>

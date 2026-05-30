@@ -757,6 +757,27 @@ export default function Bets({ playerId }) {
       .sort((a, b) => b.balance - a.balance);
   }, [nassauBets, customBets, presses, allHoles, players]);
 
+  // Minimal cash transfers to settle all debts
+  const settleUp = useMemo(() => {
+    const cred = playerBalances.filter(p => p.balance > 0.01).map(p => ({ ...p }));
+    const debt = playerBalances.filter(p => p.balance < -0.01).map(p => ({ ...p, balance: -p.balance }));
+    cred.sort((a, b) => b.balance - a.balance);
+    debt.sort((a, b) => b.balance - a.balance);
+    const transfers = [];
+    let ci = 0, di = 0;
+    while (ci < cred.length && di < debt.length) {
+      const amount = Math.min(cred[ci].balance, debt[di].balance);
+      if (amount > 0.01) {
+        transfers.push({ from: debt[di].playerId, to: cred[ci].playerId, amount });
+      }
+      cred[ci].balance -= amount;
+      debt[di].balance -= amount;
+      if (cred[ci].balance < 0.01) ci++;
+      if (debt[di].balance < 0.01) di++;
+    }
+    return transfers;
+  }, [playerBalances]);
+
   const nassauList = Object.entries(nassauBets).sort((a, b) => b[1].createdAt - a[1].createdAt);
   const customList = Object.entries(customBets).sort((a, b) => b[1].createdAt - a[1].createdAt);
 
@@ -786,6 +807,26 @@ export default function Bets({ playerId }) {
                 </span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Settle-up summary */}
+      {settleUp.length > 0 && (
+        <div className={styles.section}>
+          <div className={styles.sectionLabel}>Settle Up</div>
+          <div className={styles.settleCard}>
+            {settleUp.map(({ from, to, amount }, i) => {
+              const amtStr = Number.isInteger(amount) ? `$${amount}` : `$${amount.toFixed(2)}`;
+              return (
+                <div key={i} className={styles.settleRow}>
+                  <span style={{ color: teamColor(players, from), fontWeight: 700 }}>{firstName(players, from)}</span>
+                  <span className={styles.settlePays}>pays</span>
+                  <span style={{ color: teamColor(players, to), fontWeight: 700 }}>{firstName(players, to)}</span>
+                  <span className={styles.settleAmount}>{amtStr}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

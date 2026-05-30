@@ -178,6 +178,38 @@
   font-weight: 600;
 }
 
+.menuLink {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  transition: background 0.15s;
+}
+
+.menuLink:active {
+  background: var(--surface2);
+}
+
+.menuIcon {
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+}
+
+.menuChevron {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 18px;
+}
+
 .spectateBtn {
   margin-top: auto;
   color: var(--text-muted);
