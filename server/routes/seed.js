@@ -360,6 +360,113 @@ router.post('/', async (req, res) => {
     // ── Round 6 · Foursomes · SETUP ─────────────────────────────────────────
     u['rounds/round6'] = { format: 'foursomes', pointsValue: 1, order: 6, status: 'setup' };
 
+    // ── Side bets ─────────────────────────────────────────────────────────────
+    const now = Date.now();
+    const betComponents = [
+      { label: 'Front 9', startHole: 1, endHole: 9 },
+      { label: 'Back 9', startHole: 10, endHole: 18 },
+      { label: 'Overall', startHole: 1, endHole: 18 },
+    ];
+
+    // Nassau 1 · active fourball (match9) · Zach vs Justin · $10/comp
+    u['nassauBets/nbet1'] = {
+      matchId: 'match9',
+      playerA: 'player1', playerB: 'player5',
+      amount: 10,
+      strokeAllocation: buildAlloc(['player1', 'player5']),
+      components: betComponents,
+      createdBy: 'player1',
+      createdAt: now - 1000 * 60 * 60,
+      status: 'active',
+    };
+
+    // Nassau 2 · active fourball (match10) · Jared vs Brother · $5/comp
+    u['nassauBets/nbet2'] = {
+      matchId: 'match10',
+      playerA: 'player3', playerB: 'player7',
+      amount: 5,
+      strokeAllocation: buildAlloc(['player3', 'player7']),
+      components: betComponents,
+      createdBy: 'player3',
+      createdAt: now - 1000 * 60 * 55,
+      status: 'active',
+    };
+
+    // Nassau 3 · completed singles (match3) · Zach vs Justin · $20/comp (all segments resolved)
+    u['nassauBets/nbet3'] = {
+      matchId: 'match3',
+      playerA: 'player1', playerB: 'player5',
+      amount: 20,
+      strokeAllocation: buildAlloc(['player1', 'player5']),
+      components: betComponents,
+      createdBy: 'player5',
+      createdAt: now - 1000 * 60 * 60 * 24,
+      status: 'active',
+    };
+
+    // Press on Nassau 1 · Front 9, holes 5–9 · called by Justin (the trailing player)
+    u['presses/press1'] = {
+      nassauBetId: 'nbet1',
+      parentPressId: null,
+      segment: 'Front 9',
+      startHole: 5, endHole: 9,
+      presserPlayerId: 'player5',
+      status: 'active',
+      createdAt: now - 1000 * 60 * 40,
+    };
+
+    // Sub-press on press1 · holes 7–9 · called by Zach (recursive press)
+    u['presses/press2'] = {
+      nassauBetId: 'nbet1',
+      parentPressId: 'press1',
+      segment: null,
+      startHole: 7, endHole: 9,
+      presserPlayerId: 'player1',
+      status: 'active',
+      createdAt: now - 1000 * 60 * 30,
+    };
+
+    // Custom 1 · open · created on Bets page (no match) · 4 players
+    u['customBets/cbet1'] = {
+      description: 'Longest drive on 18',
+      players: ['player1', 'player3', 'player5', 'player7'],
+      amount: 5,
+      winners: null,
+      matchId: null,
+      createdBy: 'player1',
+      createdAt: now - 1000 * 60 * 50,
+      status: 'open',
+      settledBy: null, settledAt: null,
+    };
+
+    // Custom 2 · settled single winner · scoped to match9
+    u['customBets/cbet2'] = {
+      description: 'First birdie of round 4',
+      players: ['player1', 'player5'],
+      amount: 10,
+      winners: ['player1'],
+      winner: 'player1',
+      matchId: 'match9',
+      createdBy: 'player5',
+      createdAt: now - 1000 * 60 * 45,
+      status: 'settled',
+      settledBy: 'player5', settledAt: now - 1000 * 60 * 20,
+    };
+
+    // Custom 3 · settled multi-winner (2 win / 2 lose) · created on Bets page
+    u['customBets/cbet3'] = {
+      description: 'Closest to pin #12 — skins',
+      players: ['player2', 'player4', 'player6', 'player8'],
+      amount: 5,
+      winners: ['player2', 'player6'],
+      winner: 'player2',
+      matchId: null,
+      createdBy: 'player2',
+      createdAt: now - 1000 * 60 * 35,
+      status: 'settled',
+      settledBy: 'player2', settledAt: now - 1000 * 60 * 15,
+    };
+
     // ── Leaderboard ──────────────────────────────────────────────────────────
     const ptsAvailable = 2 + 2 + 2;
     u['leaderboard/teamA_pts']    = lbA;
@@ -380,6 +487,7 @@ router.post('/', async (req, res) => {
         round2: { teamA: r2.a, teamB: r2.b },
         round3: { teamA: r3.a, teamB: r3.b },
       },
+      bets: { nassau: 3, presses: 2, custom: 3 },
     });
   } catch (err) {
     console.error('Seed error:', err);
