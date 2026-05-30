@@ -151,6 +151,7 @@ export function formatSegmentStatus(segStatus, playerAName, playerBName, startHo
 
   const leaderName = diff > 0 ? playerAName : playerBName;
   const margin = Math.abs(diff);
-  if (decided) return `${leaderName} wins ${margin}&${remaining}`;
-  return `${leaderName} wins ${margin} UP`; // all holes played, winning by slim margin
+  // "&X" only when decided early with holes still to play; "XUP" when match ran to the end
+  if (decided && remaining > 0) return `${leaderName} wins ${margin}&${remaining}`;
+  return `${leaderName} wins ${margin}UP`;
 }
