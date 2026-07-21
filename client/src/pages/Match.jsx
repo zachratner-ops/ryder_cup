@@ -1025,17 +1025,18 @@ export default function Match({ playerId, isAdmin }) {
 
   // Auto-advance to first unplayed hole on initial load
   useEffect(() => {
-    if (initialJumped.current || Object.keys(holeData).length === 0) return;
-    const firstUnplayed = Array.from({ length: 18 }, (_, i) => i + 1)
+    if (initialJumped.current || !match || Object.keys(holeData).length === 0) return;
+    const maxH = match.format === 'scramble' && match.holeCount === 9 ? 9 : 18;
+    const firstUnplayed = Array.from({ length: maxH }, (_, i) => i + 1)
       .find(h => !holeData[h]?.holeWinner);
     if (firstUnplayed) setCurrentHole(firstUnplayed);
     initialJumped.current = true;
-  }, [holeData]);
+  }, [holeData, match]);
 
-  // Admin: initialise entryForId to first player (or 'teamA' for foursomes)
+  // Admin: initialise entryForId to first player (or 'teamA' for foursomes/scramble)
   useEffect(() => {
     if (!isAdmin || entryForId || !match) return;
-    if (match.format === 'foursomes') {
+    if (match.format === 'foursomes' || match.format === 'scramble') {
       setEntryForId('teamA');
     } else {
       const first = match.teamA?.playerIds?.[0] || match.teamB?.playerIds?.[0];
@@ -1122,23 +1123,28 @@ export default function Match({ playerId, isAdmin }) {
   // Format flags (must come first — used in variable derivations below)
   const isYellowBall = match.format === 'yellowball';
   const isFoursomes = match.format === 'foursomes';
+  const isScramble = match.format === 'scramble';
+  // Foursomes and scramble both enter one score per team, keyed 'teamA'/'teamB'
+  const isTeamEntry = isFoursomes || isScramble;
+  // Scramble can be a 9-hole round; every other format plays 18
+  const holeCount = isScramble && match.holeCount === 9 ? 9 : 18;
 
-  // For foursomes, derive team from playerId directly to avoid circular dependency
+  // For team-entry formats, derive team from playerId directly to avoid circular dependency
   const playerTeam = match.teamA?.playerIds?.includes(playerId) ? 'teamA'
     : match.teamB?.playerIds?.includes(playerId) ? 'teamB'
     : 'teamA';
 
   // The player/pair whose score we're currently entering:
-  // • normal mode  → the logged-in player (or playerTeam for foursomes)
+  // • normal mode  → the logged-in player (or playerTeam for foursomes/scramble)
   // • admin mode   → whichever player/pair admin has selected
-  // For foursomes, effectivePlayerId is 'teamA' or 'teamB' (pair key, not a player ID)
-  const effectivePlayerId = isFoursomes
+  // For team-entry formats, effectivePlayerId is 'teamA' or 'teamB' (team key, not a player ID)
+  const effectivePlayerId = isTeamEntry
     ? (isAdmin ? (entryForId || 'teamA') : playerTeam)
     : (isAdmin ? (entryForId || null) : playerId);
 
-  // myTeam: for foursomes effectivePlayerId is already 'teamA'/'teamB';
+  // myTeam: for team-entry formats effectivePlayerId is already 'teamA'/'teamB';
   // for other formats derive from which team holds the effectivePlayerId
-  const myTeam = isFoursomes
+  const myTeam = isTeamEntry
     ? effectivePlayerId
     : (effectivePlayerId && match.teamA?.playerIds?.includes(effectivePlayerId) ? 'teamA'
       : effectivePlayerId && match.teamB?.playerIds?.includes(effectivePlayerId) ? 'teamB'
@@ -1146,7 +1152,7 @@ export default function Match({ playerId, isAdmin }) {
 
   // Per-hole running match status for the non-YB scorecard column
   const scorecardStatus = (() => {
-    if (isYellowBall) return {};
+    if (isYellowBall || isScramble) return {};
     const result = {};
     let diff = 0, decided = false, decidedText = '', decidedTeam = null;
     for (let h = 1; h <= 18; h++) {
@@ -1209,7 +1215,7 @@ export default function Match({ playerId, isAdmin }) {
   const holeComplete = !!holeData[currentHole]?.holeWinner;
   const waitingOn = (() => {
     if (!iSubmitted || holeComplete) return [];
-    if (isFoursomes) {
+    if (isTeamEntry) {
       const opponentPair = myTeam === 'teamA' ? 'teamB' : 'teamA';
       return holeData[currentHole]?.[opponentPair]?.gross ? [] : ['__pair__'];
     }
@@ -1221,6 +1227,21 @@ export default function Match({ playerId, isAdmin }) {
 
   // Compute match result info when match is decided or complete
   const resultInfo = (() => {
+    if (isScramble) {
+      let cumA = 0, cumB = 0, holesPlayed = 0;
+      for (let h = 1; h <= holeCount; h++) {
+        const hd = holeData[h];
+        if (hd?.teamA?.gross == null || hd?.teamB?.gross == null) break;
+        cumA += hd.teamA.gross;
+        cumB += hd.teamB.gross;
+        holesPlayed++;
+      }
+      if (holesPlayed < holeCount && match.status !== 'complete') return null;
+      if (holesPlayed === 0) return null;
+      const diff = cumA - cumB;
+      const winner = diff < 0 ? 'teamA' : diff > 0 ? 'teamB' : null;
+      return { winner, text: diff === 0 ? 'Tied — Halved' : `by ${Math.abs(diff)} stroke${Math.abs(diff) !== 1 ? 's' : ''}` };
+    }
     if (isYellowBall) {
       let cumA = 0, cumB = 0, holesPlayed = 0;
       for (let h = 1; h <= 18; h++) {
@@ -1292,7 +1313,7 @@ export default function Match({ playerId, isAdmin }) {
     setTimeout(() => {
       setJustSaved(false);
       // Admin stays on the same hole so they can move to the next player
-      if (!isAdmin && currentHole < 18) setCurrentHole(h => h + 1);
+      if (!isAdmin && currentHole < holeCount) setCurrentHole(h => h + 1);
     }, 900);
   }
 
@@ -1306,11 +1327,16 @@ export default function Match({ playerId, isAdmin }) {
     const teamBIds = match.teamB?.playerIds || [];
     const holeRef = ref(db, `holes/${matchId}/${holeNum}`);
 
-    if (isFoursomes) {
+    if (isTeamEntry) {
       const scoreA = scores.teamA;
       const scoreB = scores.teamB;
       if (scoreA?.net == null || scoreB?.net == null) return;
       const winner = scoreA.net < scoreB.net ? 'teamA' : scoreA.net > scoreB.net ? 'teamB' : 'half';
+      if (isScramble) {
+        // Stroke play — hole winner is display-only, no match-play status
+        await update(holeRef, { holeWinner: winner });
+        return;
+      }
       const status = computeMatchStatus({ ...holeData, [holeNum]: { holeWinner: winner } }, [], []);
       await update(holeRef, { holeWinner: winner, matchStatus: status });
       return;
@@ -1343,6 +1369,23 @@ export default function Match({ playerId, isAdmin }) {
   }
 
   const matchStatus = (() => {
+    if (isScramble) {
+      let cumA = 0, cumB = 0, holesPlayed = 0;
+      for (let h = 1; h <= holeCount; h++) {
+        const hd = holeData[h];
+        if (hd?.teamA?.gross == null || hd?.teamB?.gross == null) break;
+        cumA += hd.teamA.gross;
+        cumB += hd.teamB.gross;
+        holesPlayed++;
+      }
+      if (holesPlayed === 0) return '⛳ Scramble';
+      const diff = cumA - cumB;
+      if (diff === 0) return `⛳ Tied thru ${holesPlayed}`;
+      const margin = Math.abs(diff);
+      const leadTeam = diff < 0 ? 'teamA' : 'teamB';
+      const leadName = tournament?.[leadTeam]?.name ?? leadTeam;
+      return `⛳ ${leadName} leads by ${margin} thru ${holesPlayed}`;
+    }
     if (isYellowBall) {
       let cumA = 0, cumB = 0, holesPlayed = 0;
       for (let h = 1; h <= 18; h++) {
@@ -1607,6 +1650,129 @@ export default function Match({ playerId, isAdmin }) {
     );
   }
 
+  // Scramble scorecard: Hole | Team A gross | Team B gross | running stroke diff
+  function renderScrambleScorecard() {
+    const teamAName = tournament?.teamA?.name || 'Team A';
+    const teamBName = tournament?.teamB?.name || 'Team B';
+    const gridStyle = { gridTemplateColumns: '28px 1fr 1fr 40px' };
+
+    let cumA = 0, cumB = 0;
+    for (let h = 1; h <= holeCount; h++) {
+      const hd = holeData[h];
+      if (hd?.teamA?.gross != null) cumA += hd.teamA.gross;
+      if (hd?.teamB?.gross != null) cumB += hd.teamB.gross;
+    }
+    const totalDiff = cumA - cumB;
+
+    return (
+      <div className={styles.scorecardGrid}>
+        <div className={`${styles.scRow} ${styles.scHeader}`} style={gridStyle}>
+          <span />
+          <span style={{ textAlign: 'center', color: 'var(--teamA)', fontWeight: 700, fontSize: '13px' }}>{teamAName}</span>
+          <span style={{ textAlign: 'center', color: 'var(--teamB)', fontWeight: 700, fontSize: '13px' }}>{teamBName}</span>
+          <span />
+        </div>
+
+        {Array.from({ length: holeCount }, (_, i) => i + 1).map(h => {
+          const hd = holeData[h] || {};
+          const holePar = courseHoles[h]?.par;
+
+          // Running cumulative diff through this hole
+          let runA = 0, runB = 0;
+          for (let hh = 1; hh <= h; hh++) {
+            const hhd = holeData[hh];
+            if (hhd?.teamA?.gross != null) runA += hhd.teamA.gross;
+            if (hhd?.teamB?.gross != null) runB += hhd.teamB.gross;
+          }
+          const holePlayed = hd.teamA?.gross != null && hd.teamB?.gross != null;
+          const runDiff = runA - runB;
+          const diffLabel = !holePlayed ? '' : runDiff === 0 ? 'E' : `${Math.abs(runDiff)} up`;
+          const diffColor = !holePlayed ? 'var(--text-muted)'
+            : runDiff < 0 ? 'var(--teamA)'
+            : runDiff > 0 ? 'var(--teamB)'
+            : 'var(--text-muted)';
+
+          return (
+            <div key={h} style={gridStyle} className={`${styles.scRow} ${h === currentHole ? styles.scCurrent : ''}`}>
+              <span className={styles.scHole}>{h}</span>
+              {[hd.teamA, hd.teamB].map((score, idx) => (
+                <span key={idx} className={styles.scScore}>
+                  <span className={styles.dotSlot} />
+                  <span className={`${styles.scorePill} ${ybScoreShape(score?.gross, holePar)}`}>
+                    {score?.gross ?? '—'}
+                  </span>
+                  <span className={styles.dotSlot} />
+                </span>
+              ))}
+              <span style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: diffColor, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {diffLabel}
+              </span>
+            </div>
+          );
+        })}
+
+        {/* Persistent cumulative totals */}
+        <div style={gridStyle} className={`${styles.scRow} ${styles.scTotalRow}`}>
+          <span className={styles.scHole} style={{ fontSize: 10 }}>⛳</span>
+          {[{ cum: cumA, color: 'var(--teamA)' }, { cum: cumB, color: 'var(--teamB)' }].map(({ cum, color }, idx) => (
+            <span key={idx} className={styles.scScore}>
+              <span className={styles.dotSlot} />
+              <span className={styles.scorePill} style={{ color, fontWeight: 700 }}>{cum > 0 ? cum : '—'}</span>
+              <span className={styles.dotSlot} />
+            </span>
+          ))}
+          <span style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: totalDiff < 0 ? 'var(--teamA)' : totalDiff > 0 ? 'var(--teamB)' : 'var(--text-muted)' }}>
+            {cumA === 0 && cumB === 0 ? '' : totalDiff === 0 ? 'E' : `${Math.abs(totalDiff)} up`}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // Fourball with segment scoring: Front 9 / Back 9 / Overall status strip
+  function renderSegmentStrip() {
+    const segDefs = [
+      ['front', 'F9', 1, 9],
+      ['back', 'B9', 10, 18],
+      ['overall', '18', 1, 18],
+    ];
+    return (
+      <div style={{ display: 'flex', gap: 8, margin: '0 0 12px' }}>
+        {segDefs.map(([key, label, startH, endH]) => {
+          const pts = round.segmentPoints?.[key] ?? 0;
+          let diff = 0, played = 0;
+          for (let h = startH; h <= endH; h++) {
+            const hw = holeData[h]?.holeWinner;
+            if (!hw) continue;
+            played++;
+            if (hw === 'teamA') diff++;
+            else if (hw === 'teamB') diff--;
+          }
+          const team = diff > 0 ? 'teamA' : diff < 0 ? 'teamB' : null;
+          const statusText = played === 0 ? '—' : diff === 0 ? 'AS' : `${
+            match[team]?.playerIds?.map(id => players[id]?.name?.split(' ')[0]).join('/') ?? team
+          } ${Math.abs(diff)}UP`;
+          return (
+            <div
+              key={key}
+              style={{
+                flex: 1, textAlign: 'center', padding: '8px 4px',
+                background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10,
+              }}
+            >
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
+                {label} · {pts} pt{pts !== 1 ? 's' : ''}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, marginTop: 3, color: team ? `var(--${team})` : 'var(--text-muted)' }}>
+                {statusText}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className={styles.page}>
       {/* Header */}
@@ -1618,17 +1784,17 @@ export default function Match({ playerId, isAdmin }) {
       {/* Teams */}
       <div className={styles.teams}>
         <div className={`${styles.teamPill} ${styles.teamA}`}>
-          {isYellowBall ? (tournament?.teamA?.name || 'Team A') : match.teamA?.playerIds?.map((id) => players[id]?.name || id).join(' & ')}
+          {(isYellowBall || isScramble) ? (tournament?.teamA?.name || 'Team A') : match.teamA?.playerIds?.map((id) => players[id]?.name || id).join(' & ')}
         </div>
         <div className={styles.vsLabel}>vs</div>
         <div className={`${styles.teamPill} ${styles.teamB}`}>
-          {isYellowBall ? (tournament?.teamB?.name || 'Team B') : match.teamB?.playerIds?.map((id) => players[id]?.name || id).join(' & ')}
+          {(isYellowBall || isScramble) ? (tournament?.teamB?.name || 'Team B') : match.teamB?.playerIds?.map((id) => players[id]?.name || id).join(' & ')}
         </div>
       </div>
 
       {/* Hole selector */}
       <div className={styles.holeNav}>
-        {Array.from({ length: 18 }, (_, i) => i + 1).map((h) => {
+        {Array.from({ length: holeCount }, (_, i) => i + 1).map((h) => {
           const played = !!holeData[h]?.holeWinner;
           return (
             <button
@@ -1654,7 +1820,7 @@ export default function Match({ playerId, isAdmin }) {
       {isMyMatch && !roundComplete && (
         <div className={styles.entryCard}>
           {/* Admin: player/pair picker; or player label for non-admin */}
-          {isAdmin && isFoursomes ? (
+          {isAdmin && isTeamEntry ? (
             <div className={styles.field}>
               <label style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 Entering for
@@ -1688,6 +1854,10 @@ export default function Match({ playerId, isAdmin }) {
                 })}
               </select>
             </div>
+          ) : isScramble ? (
+            <div className={styles.entryLabel}>
+              Team score — {tournament?.[myTeam]?.name || myTeam}
+            </div>
           ) : isFoursomes ? (
             <div className={styles.entryLabel}>
               Pair score — {match[myTeam]?.playerIds?.map(id => players[id]?.name?.split(' ')[0]).join(' & ')}
@@ -1713,7 +1883,7 @@ export default function Match({ playerId, isAdmin }) {
                 <span className={`${styles.grossNum} ${stepperAnnotation}`}>{entry.gross || '—'}</span>
                 <button onClick={() => setEntry((e) => ({ ...e, gross: (parseInt(e.gross) || 0) + 1 }))}>+</button>
               </div>
-              {net !== null && !isYellowBall && (
+              {net !== null && !isYellowBall && !isScramble && (
                 <div className={styles.netSection}>Net {net}{receiveStroke ? ' ●' : ''}</div>
               )}
             </div>
@@ -1769,7 +1939,9 @@ export default function Match({ playerId, isAdmin }) {
               onClick={submitHole}
               disabled={!gross || (isAdmin && !effectivePlayerId)}
             >
-              {isFoursomes
+              {isScramble
+                ? `Save Team Score — Hole ${currentHole}`
+                : isFoursomes
                 ? `Save Pair Score — Hole ${currentHole}`
                 : `Save${isAdmin ? ` ${players[effectivePlayerId]?.name?.split(' ')[0] ?? ''}'s` : ''} Hole ${currentHole}`}
             </button>
@@ -1795,7 +1967,7 @@ export default function Match({ playerId, isAdmin }) {
           {resultInfo.winner ? (
             <>
               <span style={{ color: `var(--${resultInfo.winner})` }}>
-                {isFoursomes || isYellowBall
+                {isFoursomes || isYellowBall || isScramble
                   ? tournament?.[resultInfo.winner]?.name
                   : match[resultInfo.winner]?.playerIds?.map(id => players[id]?.name?.split(' ')[0]).join(' & ')}
               </span>
@@ -1841,7 +2013,9 @@ export default function Match({ playerId, isAdmin }) {
       <div className={styles.scorecard}>
         <div className={styles.sectionLabel}>Scorecard</div>
 
-        {isFoursomes ? renderFoursomesScorecard() : isYellowBall ? (
+        {match.format === 'fourball' && round?.segmentPoints && renderSegmentStrip()}
+
+        {isScramble ? renderScrambleScorecard() : isFoursomes ? renderFoursomesScorecard() : isYellowBall ? (
           <>
             <div className={styles.ybTabs}>
               <button

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import styles from './AdminForms.module.css';
 
-const FORMATS = ['fourball', 'foursomes', 'singles', 'yellowball'];
+const FORMATS = ['fourball', 'foursomes', 'singles', 'yellowball', 'scramble'];
 
 const DEFAULT_PLAYERS = [
   { name: '', teamId: 'teamA', handicap: '' },
@@ -15,9 +15,19 @@ const DEFAULT_PLAYERS = [
 ];
 
 function defaultMatchCount(format) {
-  if (format === 'yellowball') return 1;
+  if (format === 'yellowball' || format === 'scramble') return 1;
   if (format === 'singles') return 4;
   return 2; // fourball, foursomes
+}
+
+function roundTotalPts(r) {
+  const count = (r.format === 'yellowball' || r.format === 'scramble')
+    ? 1
+    : (r.matchCount ?? defaultMatchCount(r.format));
+  const perMatch = (r.format === 'fourball' && r.useSegments)
+    ? (parseFloat(r.segFront) || 0) + (parseFloat(r.segBack) || 0) + (parseFloat(r.segOverall) || 0)
+    : (parseFloat(r.pointsValue) || 1);
+  return (perMatch * count).toFixed(1).replace(/\.0$/, '');
 }
 
 const DEFAULT_ROUNDS = [
@@ -104,8 +114,12 @@ export default function TournamentSetup() {
           id: `round${i + 1}`,
           format: r.format,
           pointsValue: parseFloat(r.pointsValue) || 1,
-          matchCount: r.format === 'yellowball' ? 1 : (parseInt(r.matchCount) || defaultMatchCount(r.format)),
+          matchCount: (r.format === 'yellowball' || r.format === 'scramble') ? 1 : (parseInt(r.matchCount) || defaultMatchCount(r.format)),
           order: i + 1,
+          segmentPoints: (r.format === 'fourball' && r.useSegments)
+            ? { front: parseFloat(r.segFront) || 0, back: parseFloat(r.segBack) || 0, overall: parseFloat(r.segOverall) || 0 }
+            : null,
+          holeCount: r.format === 'scramble' ? (r.holeCount === 9 ? 9 : 18) : null,
         })),
       };
 
@@ -219,26 +233,65 @@ export default function TournamentSetup() {
                 </select>
                 <button className={styles.removeRound} onClick={() => setRounds((p) => p.filter((_, j) => j !== i))}>✕</button>
               </div>
-              <div className={styles.roundRowSub}>
-                <label className={styles.subLabel}>Pts/match</label>
-                <input
-                  type="number" min="0.5" step="0.5"
-                  value={r.pointsValue}
-                  onChange={(e) => setRounds((prev) => { const n = [...prev]; n[i] = { ...n[i], pointsValue: e.target.value }; return n; })}
-                  className={styles.ptsInput}
-                />
-                <label className={styles.subLabel}>Matches</label>
-                <input
-                  type="number" min="1" step="1"
-                  value={r.matchCount ?? defaultMatchCount(r.format)}
-                  disabled={r.format === 'yellowball'}
-                  onChange={(e) => setRounds((prev) => { const n = [...prev]; n[i] = { ...n[i], matchCount: parseInt(e.target.value) || 1 }; return n; })}
-                  className={styles.ptsInput}
-                />
-                <span className={styles.ptsLabel}>
-                  = {((parseFloat(r.pointsValue) || 1) * (r.matchCount ?? defaultMatchCount(r.format))).toFixed(1).replace(/\.0$/, '')} pts total
-                </span>
-              </div>
+              {r.format === 'scramble' && (
+                <div className={styles.roundRowSub}>
+                  <label className={styles.subLabel}>Holes</label>
+                  <select
+                    value={r.holeCount === 9 ? 9 : 18}
+                    onChange={(e) => setRounds((prev) => { const n = [...prev]; n[i] = { ...n[i], holeCount: parseInt(e.target.value) }; return n; })}
+                  >
+                    <option value={9}>9</option>
+                    <option value={18}>18</option>
+                  </select>
+                </div>
+              )}
+              {r.format === 'fourball' && (
+                <div className={styles.roundRowSub}>
+                  <label className={styles.subLabel} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!r.useSegments}
+                      onChange={(e) => setRounds((prev) => { const n = [...prev]; n[i] = { ...n[i], useSegments: e.target.checked, segFront: n[i].segFront ?? 1, segBack: n[i].segBack ?? 1, segOverall: n[i].segOverall ?? 1 }; return n; })}
+                    />
+                    F9 / B9 / Overall pts
+                  </label>
+                </div>
+              )}
+              {r.format === 'fourball' && r.useSegments ? (
+                <div className={styles.roundRowSub}>
+                  {[['segFront', 'F9'], ['segBack', 'B9'], ['segOverall', '18']].map(([key, label]) => (
+                    <span key={key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <label className={styles.subLabel}>{label}</label>
+                      <input
+                        type="number" min="0" step="0.5"
+                        value={r[key] ?? 1}
+                        onChange={(e) => setRounds((prev) => { const n = [...prev]; n[i] = { ...n[i], [key]: e.target.value }; return n; })}
+                        className={styles.ptsInput}
+                      />
+                    </span>
+                  ))}
+                  <span className={styles.ptsLabel}>= {roundTotalPts(r)} pts total</span>
+                </div>
+              ) : (
+                <div className={styles.roundRowSub}>
+                  <label className={styles.subLabel}>Pts/match</label>
+                  <input
+                    type="number" min="0.5" step="0.5"
+                    value={r.pointsValue}
+                    onChange={(e) => setRounds((prev) => { const n = [...prev]; n[i] = { ...n[i], pointsValue: e.target.value }; return n; })}
+                    className={styles.ptsInput}
+                  />
+                  <label className={styles.subLabel}>Matches</label>
+                  <input
+                    type="number" min="1" step="1"
+                    value={(r.format === 'yellowball' || r.format === 'scramble') ? 1 : (r.matchCount ?? defaultMatchCount(r.format))}
+                    disabled={r.format === 'yellowball' || r.format === 'scramble'}
+                    onChange={(e) => setRounds((prev) => { const n = [...prev]; n[i] = { ...n[i], matchCount: parseInt(e.target.value) || 1 }; return n; })}
+                    className={styles.ptsInput}
+                  />
+                  <span className={styles.ptsLabel}>= {roundTotalPts(r)} pts total</span>
+                </div>
+              )}
             </div>
           ))}
           <button className={styles.addRound} onClick={() => setRounds((p) => [...p, { format: 'fourball', pointsValue: 1, matchCount: 2 }])}>+ Add round</button>

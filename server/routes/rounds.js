@@ -45,7 +45,10 @@ router.post('/:roundId/start', async (req, res) => {
       const teamBIds = Array.isArray(match.teamB) ? match.teamB : (match.teamB?.playerIds || []);
 
       let strokeAllocation;
-      if (round.format === 'foursomes') {
+      if (round.format === 'scramble') {
+        // Scramble: no handicaps, team gross only
+        strokeAllocation = {};
+      } else if (round.format === 'foursomes') {
         // Foursomes: one allocation per pair keyed by 'teamA'/'teamB', handicap = combined / 2
         const combinedHcpA = teamAIds.reduce((s, id) => s + (playersMap[id]?.handicap || 0), 0) / 2;
         const combinedHcpB = teamBIds.reduce((s, id) => s + (playersMap[id]?.handicap || 0), 0) / 2;
@@ -67,6 +70,7 @@ router.post('/:roundId/start', async (req, res) => {
         teamB: { playerIds: teamBIds },
         strokeAllocation,
         ...(round.format === 'yellowball' && carrierOrder ? { carrierOrder } : {}),
+        ...(round.format === 'scramble' ? { holeCount: round.holeCount === 9 ? 9 : 18 } : {}),
         status: 'active',
         result: null,
       };
@@ -108,6 +112,38 @@ router.post('/:roundId/close', async (req, res) => {
 
     for (const [matchId, match] of Object.entries(matches)) {
       const matchHoles = allHoles[matchId] || {};
+
+      // Fourball with segment scoring: award Front 9 / Back 9 / Overall separately
+      if (match.format === 'fourball' && round?.segmentPoints) {
+        const segDefs = [
+          ['front', 1, 9],
+          ['back', 10, 18],
+          ['overall', 1, 18],
+        ];
+        const segments = {};
+        let matchA = 0, matchB = 0;
+        for (const [key, startH, endH] of segDefs) {
+          const segPts = parseFloat(round.segmentPoints[key]) || 0;
+          let aHoles = 0, bHoles = 0;
+          for (let h = startH; h <= endH; h++) {
+            const hw = matchHoles[h]?.holeWinner;
+            if (hw === 'teamA') aHoles++;
+            else if (hw === 'teamB') bHoles++;
+          }
+          const segWinner = aHoles > bHoles ? 'teamA' : bHoles > aHoles ? 'teamB' : 'half';
+          segments[key] = { winner: segWinner, points: segPts };
+          if (segWinner === 'teamA') matchA += segPts;
+          else if (segWinner === 'teamB') matchB += segPts;
+          else { matchA += segPts / 2; matchB += segPts / 2; }
+        }
+        const winner = matchA > matchB ? 'teamA' : matchB > matchA ? 'teamB' : 'half';
+        updates[`matches/${matchId}/result`] = { winner, points: matchA + matchB, segments };
+        updates[`matches/${matchId}/status`] = 'complete';
+        teamA_pts += matchA;
+        teamB_pts += matchB;
+        continue;
+      }
+
       let winner;
 
       if (match.format === 'yellowball') {
@@ -116,6 +152,15 @@ router.post('/:roundId/close', async (req, res) => {
         for (let h = 1; h <= 18; h++) {
           if (matchHoles[h]?.ybNetA != null) cumA += matchHoles[h].ybNetA;
           if (matchHoles[h]?.ybNetB != null) cumB += matchHoles[h].ybNetB;
+        }
+        winner = cumA < cumB ? 'teamA' : cumA > cumB ? 'teamB' : 'half';
+      } else if (match.format === 'scramble') {
+        // Lower cumulative team gross over the configured hole count wins
+        const n = match.holeCount === 9 ? 9 : 18;
+        let cumA = 0, cumB = 0;
+        for (let h = 1; h <= n; h++) {
+          if (matchHoles[h]?.teamA?.gross != null) cumA += matchHoles[h].teamA.gross;
+          if (matchHoles[h]?.teamB?.gross != null) cumB += matchHoles[h].teamB.gross;
         }
         winner = cumA < cumB ? 'teamA' : cumA > cumB ? 'teamB' : 'half';
       } else {
@@ -161,16 +206,41 @@ router.post('/:roundId/close', async (req, res) => {
 
 // Default match count when not explicitly stored on the round
 function defaultMatchCount(format) {
-  if (format === 'yellowball') return 1;
+  if (format === 'yellowball' || format === 'scramble') return 1;
   if (format === 'singles') return 4;
   return 2; // fourball, foursomes
 }
 
-// pointsValue is per-match; read stored matchCount if present, else fall back to format default
+// pointsValue is per-match; read stored matchCount if present, else fall back to format default.
+// Segment-scored fourball rounds carry front/back/overall points per match instead.
 function roundTotalPts(r) {
-  const perMatch = parseFloat(r.pointsValue) || 0;
   const count = r.matchCount != null ? r.matchCount : defaultMatchCount(r.format);
+  if (r.format === 'fourball' && r.segmentPoints) {
+    const perMatch =
+      (parseFloat(r.segmentPoints.front) || 0) +
+      (parseFloat(r.segmentPoints.back) || 0) +
+      (parseFloat(r.segmentPoints.overall) || 0);
+    return perMatch * count;
+  }
+  const perMatch = parseFloat(r.pointsValue) || 0;
   return perMatch * count;
+}
+
+// Normalise optional per-format round config from the request body.
+// Returns { segmentPoints, holeCount } with nulls where not applicable.
+function roundExtras(format, body) {
+  const extras = { segmentPoints: null, holeCount: null };
+  if (format === 'fourball' && body.segmentPoints) {
+    extras.segmentPoints = {
+      front: parseFloat(body.segmentPoints.front) || 0,
+      back: parseFloat(body.segmentPoints.back) || 0,
+      overall: parseFloat(body.segmentPoints.overall) || 0,
+    };
+  }
+  if (format === 'scramble') {
+    extras.holeCount = parseInt(body.holeCount) === 9 ? 9 : 18;
+  }
+  return extras;
 }
 
 // Helper: recalculate ptsAvailable from all rounds minus already-awarded points
@@ -203,11 +273,12 @@ router.post('/add', async (req, res) => {
     const newRoundId = `round${newOrder}_${Date.now()}`;
     const pts = parseFloat(pointsValue) || 1;
     const fmt = format || 'fourball';
-    const count = (matchCount != null && format !== 'yellowball')
+    const count = (matchCount != null && fmt !== 'yellowball' && fmt !== 'scramble')
       ? parseInt(matchCount) || defaultMatchCount(fmt)
       : defaultMatchCount(fmt);
+    const extras = roundExtras(fmt, req.body);
 
-    const newRound = { format: fmt, pointsValue: pts, matchCount: count, order: newOrder, status: 'setup' };
+    const newRound = { format: fmt, pointsValue: pts, matchCount: count, order: newOrder, status: 'setup', ...extras };
     const updates = {};
     updates[`rounds/${newRoundId}`] = newRound;
     updates['leaderboard/ptsAvailable'] = await recalcPtsAvailable({ [newRoundId]: newRound });
@@ -236,14 +307,17 @@ router.post('/:roundId/update', async (req, res) => {
     if (round.status !== 'setup') return res.status(400).json({ error: 'Can only edit rounds in setup status' });
 
     const pts = parseFloat(pointsValue) || 1;
-    const count = (matchCount != null && format !== 'yellowball')
+    const count = (matchCount != null && format !== 'yellowball' && format !== 'scramble')
       ? parseInt(matchCount) || defaultMatchCount(format)
       : defaultMatchCount(format);
-    const updatedRound = { ...round, format, pointsValue: pts, matchCount: count };
+    const extras = roundExtras(format, req.body);
+    const updatedRound = { ...round, format, pointsValue: pts, matchCount: count, ...extras };
     const updates = {};
     updates[`rounds/${roundId}/format`] = format;
     updates[`rounds/${roundId}/pointsValue`] = pts;
     updates[`rounds/${roundId}/matchCount`] = count;
+    updates[`rounds/${roundId}/segmentPoints`] = extras.segmentPoints;
+    updates[`rounds/${roundId}/holeCount`] = extras.holeCount;
     updates['leaderboard/ptsAvailable'] = await recalcPtsAvailable({ [roundId]: updatedRound });
 
     await db.ref().update(updates);

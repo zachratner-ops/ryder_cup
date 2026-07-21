@@ -91,6 +91,12 @@ router.post('/', async (req, res) => {
             entry[pid].gross = hd[pid].gross;
           }
         }
+        // Team-entered scores (foursomes / scramble)
+        for (const teamKey of ['teamA', 'teamB']) {
+          if (hd[teamKey]?.gross != null) {
+            entry[teamKey] = { gross: hd[teamKey].gross };
+          }
+        }
         holeResults[h] = entry;
       }
 

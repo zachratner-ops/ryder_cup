@@ -3,9 +3,21 @@ const router = express.Router();
 const { db } = require('../firebase');
 
 function defaultMatchCount(format) {
-  if (format === 'yellowball') return 1;
+  if (format === 'yellowball' || format === 'scramble') return 1;
   if (format === 'singles') return 4;
   return 2; // fourball, foursomes
+}
+
+// Per-match points for a round: segment-scored fourball sums front/back/overall
+function perMatchPts(r) {
+  if (r.format === 'fourball' && r.segmentPoints) {
+    return (
+      (parseFloat(r.segmentPoints.front) || 0) +
+      (parseFloat(r.segmentPoints.back) || 0) +
+      (parseFloat(r.segmentPoints.overall) || 0)
+    );
+  }
+  return parseFloat(r.pointsValue) || 0;
 }
 
 // POST /api/tournament/setup
@@ -48,13 +60,23 @@ router.post('/setup', async (req, res) => {
         matchCount: round.matchCount || defaultMatchCount(round.format),
         order: round.order,
         status: 'setup',
+        segmentPoints: (round.format === 'fourball' && round.segmentPoints)
+          ? {
+              front: parseFloat(round.segmentPoints.front) || 0,
+              back: parseFloat(round.segmentPoints.back) || 0,
+              overall: parseFloat(round.segmentPoints.overall) || 0,
+            }
+          : null,
+        holeCount: round.format === 'scramble'
+          ? (parseInt(round.holeCount) === 9 ? 9 : 18)
+          : null,
       };
     }
 
     updates['leaderboard/teamA_pts'] = 0;
     updates['leaderboard/teamB_pts'] = 0;
     updates['leaderboard/ptsAvailable'] = rounds.reduce(
-      (s, r) => s + r.pointsValue * (r.matchCount || defaultMatchCount(r.format)),
+      (s, r) => s + perMatchPts(r) * (r.matchCount || defaultMatchCount(r.format)),
       0
     );
     updates['leaderboard/lastUpdated'] = Date.now();

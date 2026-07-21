@@ -39,8 +39,36 @@ function computeYBInfo(matchHoles) {
   return { diff: cumA - cumB, holesPlayed };
 }
 
+// Scramble: cumulative team gross differential (lower = better)
+function computeScrambleInfo(matchHoles, holeCount) {
+  let cumA = 0, cumB = 0, holesPlayed = 0;
+  for (let h = 1; h <= holeCount; h++) {
+    const hole = matchHoles?.[h];
+    if (hole?.teamA?.gross == null || hole?.teamB?.gross == null) break;
+    cumA += hole.teamA.gross;
+    cumB += hole.teamB.gross;
+    holesPlayed++;
+  }
+  return { diff: cumA - cumB, holesPlayed };
+}
+
+// Match-play hole diff within a range (for segment-scored fourball)
+function computeSegDiff(matchHoles, startH, endH) {
+  let diff = 0, played = 0;
+  for (let h = startH; h <= endH; h++) {
+    const hw = matchHoles?.[h]?.holeWinner;
+    if (!hw) continue;
+    played++;
+    if (hw === 'teamA') diff++;
+    else if (hw === 'teamB') diff--;
+  }
+  return { diff, played };
+}
+
+const scrambleHoleCount = (match) => (match.holeCount === 9 ? 9 : 18);
+
 const formatLabel = (f) => {
-  const labels = { fourball: 'Four-ball', foursomes: 'Foursomes', singles: 'Singles', yellowball: 'Yellow Ball' };
+  const labels = { fourball: 'Four-ball', foursomes: 'Foursomes', singles: 'Singles', yellowball: 'Yellow Ball', scramble: 'Scramble' };
   return labels[f] || f;
 };
 
@@ -84,14 +112,35 @@ export default function Leaderboard({ playerId }) {
   let liveBPoints = 0;
   Object.entries(matches).forEach(([matchId, match]) => {
     if (match.status !== 'active') return;
-    const pts = rounds[match.roundId]?.pointsValue || 1;
+    const round = rounds[match.roundId];
+    const matchHoles = allHoles[matchId] || {};
+
+    // Segment-scored fourball: project Front 9 / Back 9 / Overall separately
+    if (match.format === 'fourball' && round?.segmentPoints) {
+      const segDefs = [['front', 1, 9], ['back', 10, 18], ['overall', 1, 18]];
+      for (const [key, startH, endH] of segDefs) {
+        const segPts = parseFloat(round.segmentPoints[key]) || 0;
+        const { diff, played } = computeSegDiff(matchHoles, startH, endH);
+        if (played === 0) continue;
+        if (diff > 0) liveAPoints += segPts;
+        else if (diff < 0) liveBPoints += segPts;
+        else { liveAPoints += segPts / 2; liveBPoints += segPts / 2; }
+      }
+      return;
+    }
+
+    const pts = round?.pointsValue || 1;
     const isYB = match.format === 'yellowball';
-    // YB: negative diff = teamA leads (fewer strokes); match play: positive diff = teamA leads
+    const isScr = match.format === 'scramble';
+    // YB/scramble: negative diff = teamA leads (fewer strokes); match play: positive diff = teamA leads
     const { diff, holesPlayed } = isYB
-      ? computeYBInfo(allHoles[matchId] || {})
-      : computeMatchInfo(allHoles[matchId] || {});
-    const aLeads = isYB ? diff < 0 : diff > 0;
-    const bLeads = isYB ? diff > 0 : diff < 0;
+      ? computeYBInfo(matchHoles)
+      : isScr
+      ? computeScrambleInfo(matchHoles, scrambleHoleCount(match))
+      : computeMatchInfo(matchHoles);
+    const lowerWins = isYB || isScr;
+    const aLeads = lowerWins ? diff < 0 : diff > 0;
+    const bLeads = lowerWins ? diff > 0 : diff < 0;
     if (aLeads) liveAPoints += pts;
     else if (bLeads) liveBPoints += pts;
     else if (holesPlayed > 0) { liveAPoints += pts / 2; liveBPoints += pts / 2; }
@@ -225,11 +274,15 @@ export default function Leaderboard({ playerId }) {
                 {expanded && roundMatches.map(([matchId, match]) => {
                   const matchHoles = allHoles[matchId] || {};
                   const isYB = match.format === 'yellowball';
+                  const isScr = match.format === 'scramble';
+                  const stripHoles = isScr ? scrambleHoleCount(match) : 18;
 
                   // Compute who's leading and by how much
                   let holesPlayed, leader, margin, decidedMargin = null, decidedRemaining = null;
-                  if (isYB) {
-                    const info = computeYBInfo(matchHoles);
+                  if (isYB || isScr) {
+                    const info = isYB
+                      ? computeYBInfo(matchHoles)
+                      : computeScrambleInfo(matchHoles, stripHoles);
                     holesPlayed = info.holesPlayed;
                     leader = info.holesPlayed > 0 && info.diff !== 0
                       ? (info.diff < 0 ? 'teamA' : 'teamB') : null;
@@ -244,16 +297,16 @@ export default function Leaderboard({ playerId }) {
                     decidedRemaining = info.decidedRemaining;
                   }
 
-                  // YB shows team names; match play shows player first names
-                  const displayA = isYB
+                  // Team formats show team names; match play shows player first names
+                  const displayA = (isYB || isScr)
                     ? teamAName
                     : match.teamA?.playerIds?.map(id => players[id]?.name?.split(' ')[0] || id).join(' & ') || '—';
-                  const displayB = isYB
+                  const displayB = (isYB || isScr)
                     ? teamBName
                     : match.teamB?.playerIds?.map(id => players[id]?.name?.split(' ')[0] || id).join(' & ') || '—';
 
-                  // Lead text: "Up by N stroke(s)" for YB; "N&R" (decided) or "NUP" for match play
-                  const leadText = isYB
+                  // Lead text: "Up by N stroke(s)" for stroke-play formats; "N&R" (decided) or "NUP" for match play
+                  const leadText = (isYB || isScr)
                     ? `Up by ${margin} stroke${margin !== 1 ? 's' : ''}`
                     : decidedMargin != null ? `${decidedMargin}&${decidedRemaining}` : `${margin}UP`;
 
@@ -270,7 +323,7 @@ export default function Leaderboard({ playerId }) {
                             <span className={styles.mcNameA}>{displayA}</span>
                           </div>
                           {leader === 'teamA' && (
-                            <span className={isYB ? styles.mcUpSm : styles.mcUp} style={{ color: 'var(--teamA)', paddingLeft: 24 }}>
+                            <span className={(isYB || isScr) ? styles.mcUpSm : styles.mcUp} style={{ color: 'var(--teamA)', paddingLeft: 24 }}>
                               {leadText}
                             </span>
                           )}
@@ -278,7 +331,7 @@ export default function Leaderboard({ playerId }) {
 
                         <div className={styles.mcCenter}>
                           {leader === null && holesPlayed > 0 && (
-                            <span className={styles.mcAllSquare}>{isYB ? 'Tied' : 'All Square'}</span>
+                            <span className={styles.mcAllSquare}>{(isYB || isScr) ? 'Tied' : 'All Square'}</span>
                           )}
                           <span className={styles.mcThruText}>
                             {holesPlayed > 0 ? `Thru ${holesPlayed}` : match.status === 'active' ? 'Starting' : '—'}
@@ -291,7 +344,7 @@ export default function Leaderboard({ playerId }) {
                             <TeamLogo teamId="teamB" size={18} />
                           </div>
                           {leader === 'teamB' && (
-                            <span className={isYB ? styles.mcUpSm : styles.mcUp} style={{ color: 'var(--teamB)', paddingRight: 24 }}>
+                            <span className={(isYB || isScr) ? styles.mcUpSm : styles.mcUp} style={{ color: 'var(--teamB)', paddingRight: 24 }}>
                               {leadText}
                             </span>
                           )}
@@ -299,7 +352,7 @@ export default function Leaderboard({ playerId }) {
                       </div>
 
                       <div className={styles.mcHoleStrip}>
-                        {Array.from({ length: 18 }, (_, i) => i + 1).map((h) => {
+                        {Array.from({ length: stripHoles }, (_, i) => i + 1).map((h) => {
                           const winner = matchHoles[h]?.holeWinner;
                           const dotClass = winner === 'teamA' ? styles.mcDotA
                             : winner === 'teamB' ? styles.mcDotB
