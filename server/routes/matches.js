@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../firebase');
+const { verifyPin } = require('../adminPin');
 
 // POST /api/matches/:matchId/correct
 // Admin score correction
@@ -10,8 +11,7 @@ router.post('/:matchId/correct', async (req, res) => {
     const { matchId } = req.params;
     const { adminPin, playerId, holeNumber, gross, fairwayHit, gir, putts } = req.body;
 
-    const tournSnap = await db.ref('tournament').once('value');
-    if (tournSnap.val().adminPin !== adminPin) return res.status(403).json({ error: 'Bad PIN' });
+    if (!(await verifyPin(adminPin))) return res.status(403).json({ error: 'Bad PIN' });
 
     // Load stroke allocation to recompute net
     const matchSnap = await db.ref(`matches/${matchId}`).once('value');

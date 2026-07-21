@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ref, onValue, set, update, push } from 'firebase/database';
+import { ref, onValue, set, update, push, runTransaction } from 'firebase/database';
 import { db } from '../firebase';
 import { enqueue, dequeueAll, removeById, getQueueLength } from '../offlineQueue';
 import TeamLogo from '../components/TeamLogo';
@@ -65,8 +65,11 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
   const [skinsEndHole, setSkinsEndHole] = useState('18');
   const [skinsPlayers, setSkinsPlayers] = useState(allPlayerIds);
 
+  // Scramble has no per-player scores, so Nassau and skins can't resolve — custom bets only
+  const scrambleMatch = match?.format === 'scramble';
+
   // Custom create form
-  const [createTab, setCreateTab] = useState('nassau');
+  const [createTab, setCreateTab] = useState(scrambleMatch ? 'custom' : 'nassau');
   const [customDesc, setCustomDesc] = useState('');
   const [customPlayerIds, setCustomPlayerIds] = useState(playerId ? [playerId] : []);
   const [customAmount, setCustomAmount] = useState('');
@@ -663,6 +666,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
           <div className={styles.sheetHandle} />
           <div className={styles.sheetTitle}>Add Bet</div>
           <div className={styles.ybTabs} style={{ marginBottom: 2 }}>
+            {!scrambleMatch && (
             <button
               className={`${styles.ybTabBtn} ${createTab === 'nassau' ? styles.ybTabActive : ''}`}
               style={createTab === 'nassau' ? { color: 'var(--accent)', borderColor: 'var(--accent)' } : {}}
@@ -670,6 +674,8 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
             >
               Nassau
             </button>
+            )}
+            {!scrambleMatch && (
             <button
               className={`${styles.ybTabBtn} ${createTab === 'skins' ? styles.ybTabActive : ''}`}
               style={createTab === 'skins' ? { color: 'var(--accent)', borderColor: 'var(--accent)' } : {}}
@@ -677,6 +683,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
             >
               Skins
             </button>
+            )}
             <button
               className={`${styles.ybTabBtn} ${createTab === 'custom' ? styles.ybTabActive : ''}`}
               style={createTab === 'custom' ? { color: 'var(--accent)', borderColor: 'var(--accent)' } : {}}
@@ -1318,54 +1325,52 @@ export default function Match({ playerId, isAdmin }) {
   }
 
   async function computeAndWriteHoleWinner(holeNum) {
-    const snap = await new Promise((resolve) =>
-      onValue(ref(db, `holes/${matchId}/${holeNum}`), resolve, { onlyOnce: true })
-    );
-    const scores = snap.val() || {};
-
     const teamAIds = match.teamA?.playerIds || [];
     const teamBIds = match.teamB?.playerIds || [];
     const holeRef = ref(db, `holes/${matchId}/${holeNum}`);
 
-    if (isTeamEntry) {
-      const scoreA = scores.teamA;
-      const scoreB = scores.teamB;
-      if (scoreA?.net == null || scoreB?.net == null) return;
-      const winner = scoreA.net < scoreB.net ? 'teamA' : scoreA.net > scoreB.net ? 'teamB' : 'half';
-      if (isScramble) {
-        // Stroke play — hole winner is display-only, no match-play status
-        await update(holeRef, { holeWinner: winner });
-        return;
+    // Transaction: winner is always computed from the hole's current scores,
+    // so two players saving simultaneously can't decide it from stale data.
+    await runTransaction(holeRef, (scores) => {
+      if (!scores) return scores;
+
+      if (isTeamEntry) {
+        const scoreA = scores.teamA;
+        const scoreB = scores.teamB;
+        if (scoreA?.net == null || scoreB?.net == null) return scores;
+        const winner = scoreA.net < scoreB.net ? 'teamA' : scoreA.net > scoreB.net ? 'teamB' : 'half';
+        if (isScramble) {
+          // Stroke play — hole winner is display-only, no match-play status
+          return { ...scores, holeWinner: winner };
+        }
+        const status = computeMatchStatus({ ...holeData, [holeNum]: { holeWinner: winner } }, [], []);
+        return { ...scores, holeWinner: winner, matchStatus: status };
       }
-      const status = computeMatchStatus({ ...holeData, [holeNum]: { holeWinner: winner } }, [], []);
-      await update(holeRef, { holeWinner: winner, matchStatus: status });
-      return;
-    }
 
-    if (isYellowBall) {
-      const carrierAId = getCarrier(holeNum, 'teamA');
-      const carrierBId = getCarrier(holeNum, 'teamB');
-      const ybNetA = scores[carrierAId]?.net;
-      const ybNetB = scores[carrierBId]?.net;
-      if (ybNetA == null || ybNetB == null) return;
-      const winner = ybNetA < ybNetB ? 'teamA' : ybNetA > ybNetB ? 'teamB' : 'half';
-      await update(holeRef, { holeWinner: winner, ybNetA, ybNetB });
-      return;
-    }
+      if (isYellowBall) {
+        const carrierAId = getCarrier(holeNum, 'teamA');
+        const carrierBId = getCarrier(holeNum, 'teamB');
+        const ybNetA = scores[carrierAId]?.net;
+        const ybNetB = scores[carrierBId]?.net;
+        if (ybNetA == null || ybNetB == null) return scores;
+        const winner = ybNetA < ybNetB ? 'teamA' : ybNetA > ybNetB ? 'teamB' : 'half';
+        return { ...scores, holeWinner: winner, ybNetA, ybNetB };
+      }
 
-    const teamANets = teamAIds.map((id) => scores[id]?.net).filter((n) => n != null);
-    const teamBNets = teamBIds.map((id) => scores[id]?.net).filter((n) => n != null);
-    if (teamANets.length < teamAIds.length || teamBNets.length < teamBIds.length) return;
+      const teamANets = teamAIds.map((id) => scores[id]?.net).filter((n) => n != null);
+      const teamBNets = teamBIds.map((id) => scores[id]?.net).filter((n) => n != null);
+      if (teamANets.length < teamAIds.length || teamBNets.length < teamBIds.length) return scores;
 
-    const bestA = Math.min(...teamANets);
-    const bestB = Math.min(...teamBNets);
-    const winner = bestA < bestB ? 'teamA' : bestA > bestB ? 'teamB' : 'half';
-    const status = computeMatchStatus(
-      { ...holeData, [holeNum]: { holeWinner: winner } },
-      teamAIds,
-      teamBIds
-    );
-    await update(holeRef, { holeWinner: winner, matchStatus: status });
+      const bestA = Math.min(...teamANets);
+      const bestB = Math.min(...teamBNets);
+      const winner = bestA < bestB ? 'teamA' : bestA > bestB ? 'teamB' : 'half';
+      const status = computeMatchStatus(
+        { ...holeData, [holeNum]: { holeWinner: winner } },
+        teamAIds,
+        teamBIds
+      );
+      return { ...scores, holeWinner: winner, matchStatus: status };
+    });
   }
 
   const matchStatus = (() => {

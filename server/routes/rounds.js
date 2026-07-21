@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../firebase');
+const { verifyPin } = require('../adminPin');
 const { computeStrokeAllocation } = require('../strokeAllocation');
+const { computeMatchResult } = require('../scoring');
 
 // POST /api/rounds/:roundId/start
 // Body: { adminPin, matches: [{ matchId, teamA: {playerIds}, teamB: {playerIds} }] }
@@ -11,9 +13,7 @@ router.post('/:roundId/start', async (req, res) => {
     const { roundId } = req.params;
     const { adminPin, matches, carrierOrder } = req.body;
 
-    const tournSnap = await db.ref('tournament').once('value');
-    const tourn = tournSnap.val();
-    if (tourn.adminPin !== adminPin) return res.status(403).json({ error: 'Bad PIN' });
+    if (!(await verifyPin(adminPin))) return res.status(403).json({ error: 'Bad PIN' });
 
     const roundSnap = await db.ref(`rounds/${roundId}`).once('value');
     const round = roundSnap.val();
@@ -91,8 +91,7 @@ router.post('/:roundId/close', async (req, res) => {
     const { roundId } = req.params;
     const { adminPin } = req.body;
 
-    const tournSnap = await db.ref('tournament').once('value');
-    if (tournSnap.val().adminPin !== adminPin) return res.status(403).json({ error: 'Bad PIN' });
+    if (!(await verifyPin(adminPin))) return res.status(403).json({ error: 'Bad PIN' });
 
     // Fetch matches, round config, and hole-by-hole data in parallel
     const [matchesSnap, roundSnap, holesSnap] = await Promise.all([
@@ -108,78 +107,13 @@ router.post('/:roundId/close', async (req, res) => {
     let teamB_pts = 0;
 
     const updates = {};
-    const pts = parseFloat(round?.pointsValue) || 1;
 
     for (const [matchId, match] of Object.entries(matches)) {
-      const matchHoles = allHoles[matchId] || {};
-
-      // Fourball with segment scoring: award Front 9 / Back 9 / Overall separately
-      if (match.format === 'fourball' && round?.segmentPoints) {
-        const segDefs = [
-          ['front', 1, 9],
-          ['back', 10, 18],
-          ['overall', 1, 18],
-        ];
-        const segments = {};
-        let matchA = 0, matchB = 0;
-        for (const [key, startH, endH] of segDefs) {
-          const segPts = parseFloat(round.segmentPoints[key]) || 0;
-          let aHoles = 0, bHoles = 0;
-          for (let h = startH; h <= endH; h++) {
-            const hw = matchHoles[h]?.holeWinner;
-            if (hw === 'teamA') aHoles++;
-            else if (hw === 'teamB') bHoles++;
-          }
-          const segWinner = aHoles > bHoles ? 'teamA' : bHoles > aHoles ? 'teamB' : 'half';
-          segments[key] = { winner: segWinner, points: segPts };
-          if (segWinner === 'teamA') matchA += segPts;
-          else if (segWinner === 'teamB') matchB += segPts;
-          else { matchA += segPts / 2; matchB += segPts / 2; }
-        }
-        const winner = matchA > matchB ? 'teamA' : matchB > matchA ? 'teamB' : 'half';
-        updates[`matches/${matchId}/result`] = { winner, points: matchA + matchB, segments };
-        updates[`matches/${matchId}/status`] = 'complete';
-        teamA_pts += matchA;
-        teamB_pts += matchB;
-        continue;
-      }
-
-      let winner;
-
-      if (match.format === 'yellowball') {
-        // Lower cumulative net yellow-ball score wins
-        let cumA = 0, cumB = 0;
-        for (let h = 1; h <= 18; h++) {
-          if (matchHoles[h]?.ybNetA != null) cumA += matchHoles[h].ybNetA;
-          if (matchHoles[h]?.ybNetB != null) cumB += matchHoles[h].ybNetB;
-        }
-        winner = cumA < cumB ? 'teamA' : cumA > cumB ? 'teamB' : 'half';
-      } else if (match.format === 'scramble') {
-        // Lower cumulative team gross over the configured hole count wins
-        const n = match.holeCount === 9 ? 9 : 18;
-        let cumA = 0, cumB = 0;
-        for (let h = 1; h <= n; h++) {
-          if (matchHoles[h]?.teamA?.gross != null) cumA += matchHoles[h].teamA.gross;
-          if (matchHoles[h]?.teamB?.gross != null) cumB += matchHoles[h].teamB.gross;
-        }
-        winner = cumA < cumB ? 'teamA' : cumA > cumB ? 'teamB' : 'half';
-      } else {
-        // Match play: team with more holes won takes the match
-        let aHoles = 0, bHoles = 0;
-        for (let h = 1; h <= 18; h++) {
-          const hw = matchHoles[h]?.holeWinner;
-          if (hw === 'teamA') aHoles++;
-          else if (hw === 'teamB') bHoles++;
-        }
-        winner = aHoles > bHoles ? 'teamA' : bHoles > aHoles ? 'teamB' : 'half';
-      }
-
-      updates[`matches/${matchId}/result`] = { winner, points: pts };
+      const outcome = computeMatchResult(match, allHoles[matchId] || {}, round);
+      updates[`matches/${matchId}/result`] = outcome.result;
       updates[`matches/${matchId}/status`] = 'complete';
-
-      if (winner === 'teamA') teamA_pts += pts;
-      else if (winner === 'teamB') teamB_pts += pts;
-      else { teamA_pts += pts / 2; teamB_pts += pts / 2; }
+      teamA_pts += outcome.teamA_pts;
+      teamB_pts += outcome.teamB_pts;
     }
 
     updates[`rounds/${roundId}/status`] = 'complete';
@@ -263,8 +197,7 @@ async function recalcPtsAvailable(extraRounds = {}) {
 router.post('/add', async (req, res) => {
   try {
     const { adminPin, format, pointsValue, matchCount } = req.body;
-    const tournSnap = await db.ref('tournament').once('value');
-    if (tournSnap.val().adminPin !== adminPin) return res.status(403).json({ error: 'Bad PIN' });
+    if (!(await verifyPin(adminPin))) return res.status(403).json({ error: 'Bad PIN' });
 
     const roundsSnap = await db.ref('rounds').once('value');
     const rounds = roundsSnap.val() || {};
@@ -298,8 +231,7 @@ router.post('/:roundId/update', async (req, res) => {
     const { roundId } = req.params;
     const { adminPin, format, pointsValue, matchCount } = req.body;
 
-    const tournSnap = await db.ref('tournament').once('value');
-    if (tournSnap.val().adminPin !== adminPin) return res.status(403).json({ error: 'Bad PIN' });
+    if (!(await verifyPin(adminPin))) return res.status(403).json({ error: 'Bad PIN' });
 
     const roundSnap = await db.ref(`rounds/${roundId}`).once('value');
     const round = roundSnap.val();
@@ -335,8 +267,7 @@ router.post('/:roundId/delete', async (req, res) => {
     const { roundId } = req.params;
     const { adminPin } = req.body;
 
-    const tournSnap = await db.ref('tournament').once('value');
-    if (tournSnap.val().adminPin !== adminPin) return res.status(403).json({ error: 'Bad PIN' });
+    if (!(await verifyPin(adminPin))) return res.status(403).json({ error: 'Bad PIN' });
 
     const roundSnap = await db.ref(`rounds/${roundId}`).once('value');
     const round = roundSnap.val();

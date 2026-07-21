@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../firebase');
+const { verifyPin } = require('../adminPin');
 
 // POST /api/tournament/archive
 // Body: { adminPin, reset?: boolean }
@@ -11,9 +12,7 @@ router.post('/', async (req, res) => {
     const { adminPin, reset = false } = req.body;
 
     // Verify PIN
-    const pinSnap = await db.ref('tournament/adminPin').once('value');
-    const storedPin = pinSnap.val();
-    if (storedPin && storedPin !== adminPin) {
+    if (!(await verifyPin(adminPin))) {
       return res.status(403).json({ error: 'Bad PIN' });
     }
 
@@ -170,6 +169,7 @@ router.post('/', async (req, res) => {
         skinsBets: null,
         course: null,
         activeSessions: null,
+        admin: null,
       });
     }
 

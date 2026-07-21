@@ -1,32 +1,18 @@
 {
   "rules": {
-    ".read": true,
-    "tournament": {
-      ".write": false,
-      "adminPin": {
-        ".read": false
-      }
-    },
-    "players": {
-      ".write": true
-    },
-    "course": {
-      ".write": false
-    },
-    "rounds": {
-      ".write": false
-    },
-    "matches": {
-      ".write": false
-    },
-    "holes": {
-      ".write": true
-    },
-    "leaderboard": {
-      ".write": false
-    },
-    "activeSessions": {
-      ".write": true
-    }
+    "tournament": { ".read": true, ".write": false },
+    "players": { ".read": true, ".write": true },
+    "course": { ".read": true, ".write": false },
+    "rounds": { ".read": true, ".write": false },
+    "matches": { ".read": true, ".write": false },
+    "holes": { ".read": true, ".write": true },
+    "leaderboard": { ".read": true, ".write": false },
+    "activeSessions": { ".read": true, ".write": true },
+    "nassauBets": { ".read": true, ".write": false },
+    "customBets": { ".read": true, ".write": true },
+    "skinsBets": { ".read": true, ".write": true },
+    "presses": { ".read": true, ".write": true },
+    "tournamentArchives": { ".read": true, ".write": false },
+    "admin": { ".read": false, ".write": false }
   }
 }

@@ -290,7 +290,7 @@ function SkinsCreateForm({ players, matches, rounds, playerId, onClose }) {
   const [error, setError] = useState('');
 
   const activeMatches = Object.entries(matches)
-    .filter(([, m]) => m.status !== 'complete')
+    .filter(([, m]) => m.status !== 'complete' && m.format !== 'scramble')
     .sort(([, a], [, b]) => (rounds[a.roundId]?.order ?? 99) - (rounds[b.roundId]?.order ?? 99));
 
   function handleMatchChange(mid) {
@@ -446,7 +446,7 @@ function CreateBetModal({ players, matches, rounds, playerId, onClose, onCreated
 
   // Show active/upcoming (not completed) matches
   const activeMatches = Object.entries(matches)
-    .filter(([, m]) => m.status !== 'complete')
+    .filter(([, m]) => m.status !== 'complete' && m.format !== 'scramble')
     .sort(([, a], [, b]) => {
       const rA = rounds[a.roundId]?.order ?? 99;
       const rB = rounds[b.roundId]?.order ?? 99;

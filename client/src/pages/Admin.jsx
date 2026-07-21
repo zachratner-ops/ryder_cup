@@ -22,20 +22,22 @@ export default function Admin() {
 
   async function handleLogin(e) {
     e.preventDefault();
-    // Verify PIN against Firebase
-    const snap = await new Promise((resolve) =>
-      onValue(ref(db, 'tournament/adminPin'), resolve, { onlyOnce: true })
-    );
-    const storedPin = snap.val();
-    if (!storedPin) {
-      // No tournament yet — allow any PIN to enter setup
-      setAuthed(true);
-      return;
-    }
-    if (pin === storedPin) {
-      setAuthed(true);
-    } else {
-      setError('Wrong PIN');
+    // Verify PIN server-side — the PIN itself is not readable from the client.
+    // The server treats any PIN as valid when no tournament exists yet (setup mode).
+    try {
+      const res = await fetch('/api/tournament/verify-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminPin: pin }),
+      });
+      const data = await res.json();
+      if (res.ok && data.valid) {
+        setAuthed(true);
+      } else {
+        setError('Wrong PIN');
+      }
+    } catch {
+      setError('Could not reach server');
     }
   }
 

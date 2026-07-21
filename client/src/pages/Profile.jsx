@@ -30,12 +30,19 @@ export default function Profile({ playerId, isAdmin, onSelect, onClear, onActiva
   async function handleActivateAdmin(e) {
     e.preventDefault();
     setSkError('');
-    const snap = await new Promise(resolve =>
-      onValue(ref(db, 'tournament/adminPin'), resolve, { onlyOnce: true })
-    );
-    const storedPin = snap.val();
-    if (!storedPin || skPin !== storedPin) {
-      setSkError('Wrong PIN');
+    try {
+      const res = await fetch('/api/tournament/verify-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminPin: skPin }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.valid) {
+        setSkError('Wrong PIN');
+        return;
+      }
+    } catch {
+      setSkError('Could not reach server');
       return;
     }
     onActivateAdmin();

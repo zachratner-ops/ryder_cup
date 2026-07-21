@@ -147,6 +147,24 @@ function buildBallHoles(u, matchId, teamAIds, teamBIds, alloc, rng, n = 18) {
   return diff > 0 ? 'teamA' : diff < 0 ? 'teamB' : 'half';
 }
 
+// Scramble: one team gross per hole — scrambles run hot, so birdie-heavy
+function buildScrambleHoles(u, matchId, rng, n) {
+  for (let h = 1; h <= n; h++) {
+    const { par } = COURSE_HOLES[h - 1];
+    const teamGross = () => {
+      const r = rng();
+      return par + (r < 0.3 ? -1 : r < 0.85 ? 0 : 1);
+    };
+    const gA = teamGross();
+    const gB = teamGross();
+    u[`holes/${matchId}/${h}`] = {
+      teamA: { gross: gA, net: gA },
+      teamB: { gross: gB, net: gB },
+      holeWinner: gA < gB ? 'teamA' : gA > gB ? 'teamB' : 'half',
+    };
+  }
+}
+
 function buildYBHoles(u, matchId, teamAIds, teamBIds, carrierA, carrierB, rng, n = 18) {
   const allIds = [...teamAIds, ...teamBIds];
 
@@ -195,6 +213,7 @@ function buildYBHoles(u, matchId, teamAIds, teamBIds, carrierA, carrierB, rng, n
 //   seed    - integer seed for reproducible results (default: random)
 //   r4holes - holes played in round 4 fourball (default: 12, range 0-18)
 //   r5holes - holes played in round 5 yellow ball (default: 9, range 0-18)
+//   r7holes - holes played in round 7 scramble (default: 5, range 0-9)
 
 router.post('/', async (req, res) => {
   try {
@@ -205,6 +224,7 @@ router.post('/', async (req, res) => {
 
     const r4holes = Math.min(18, Math.max(0, parseInt(req.query.r4holes ?? '12')));
     const r5holes = Math.min(18, Math.max(0, parseInt(req.query.r5holes ?? '9')));
+    const r7holes = Math.min(9, Math.max(0, parseInt(req.query.r7holes ?? '5')));
 
     const rng = makePRNG(seed);
 
@@ -213,13 +233,14 @@ router.post('/', async (req, res) => {
       tournament: null, players: null, rounds: null, matches: null,
       holes: null, leaderboard: null, nassauBets: null, customBets: null,
       presses: null, skinsBets: null, course: null, activeSessions: null,
+      admin: null,
     });
     const u = {};
 
     // Tournament meta
-    u['tournament/name']     = 'GrayBull Ryder Cup';
-    u['tournament/status']   = 'active';
-    u['tournament/adminPin'] = '1234';
+    u['tournament/name']   = 'GrayBull Ryder Cup';
+    u['tournament/status'] = 'active';
+    u['admin/pin']         = '1234';
     u['tournament/teamA']    = { name: 'Northwestern', color: '#4E2A84' };
     u['tournament/teamB']    = { name: 'Nebraska',     color: '#D00000' };
 
@@ -321,8 +342,11 @@ router.post('/', async (req, res) => {
     u['leaderboard/rounds/round3'] = { teamA_pts: r3.a, teamB_pts: r3.b, status: 'complete' };
     lbA += r3.a; lbB += r3.b;
 
-    // ── Round 4 · Four-ball · ACTIVE ────────────────────────────────────────
-    u['rounds/round4'] = { format: 'fourball', pointsValue: 1, order: 4, status: 'active' };
+    // ── Round 4 · Four-ball (F9/B9/Overall points) · ACTIVE ─────────────────
+    u['rounds/round4'] = {
+      format: 'fourball', pointsValue: 1, order: 4, status: 'active',
+      segmentPoints: { front: 1, back: 1, overall: 1 },
+    };
 
     const r4a1 = buildAlloc(['player1','player2','player5','player6']);
     const r4a2 = buildAlloc(['player3','player4','player7','player8']);
@@ -364,6 +388,18 @@ router.post('/', async (req, res) => {
 
     // ── Round 6 · Foursomes · SETUP ─────────────────────────────────────────
     u['rounds/round6'] = { format: 'foursomes', pointsValue: 1, order: 6, status: 'setup' };
+
+    // ── Round 7 · Scramble (9 holes) · ACTIVE ───────────────────────────────
+    u['rounds/round7'] = { format: 'scramble', pointsValue: 1, holeCount: 9, order: 7, status: 'active' };
+    buildScrambleHoles(u, 'match12', rng, r7holes);
+    u['matches/match12'] = {
+      roundId: 'round7', format: 'scramble', status: 'active',
+      holeCount: 9,
+      teamA: { playerIds: ['player1','player2','player3','player4'] },
+      teamB: { playerIds: ['player5','player6','player7','player8'] },
+      strokeAllocation: {},
+      result: null,
+    };
 
     // ── Side bets ─────────────────────────────────────────────────────────────
     const now = Date.now();
@@ -473,7 +509,8 @@ router.post('/', async (req, res) => {
     };
 
     // ── Leaderboard ──────────────────────────────────────────────────────────
-    const ptsAvailable = 2 + 2 + 2;
+    // r4 segmented fourball (2 matches × 3 segment pts) + r5 YB (2) + r6 foursomes (2) + r7 scramble (1)
+    const ptsAvailable = 6 + 2 + 2 + 1;
     u['leaderboard/teamA_pts']    = lbA;
     u['leaderboard/teamB_pts']    = lbB;
     u['leaderboard/ptsAvailable'] = ptsAvailable;
@@ -484,7 +521,7 @@ router.post('/', async (req, res) => {
     res.json({
       ok: true,
       seed,                    // echo back so you can reproduce this exact tournament
-      params: { r4holes, r5holes },
+      params: { r4holes, r5holes, r7holes },
       adminPin: '1234',
       leaderboard: { teamA: lbA, teamB: lbB, ptsAvailable },
       roundResults: {

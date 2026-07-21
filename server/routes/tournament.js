@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../firebase');
+const { verifyPin } = require('../adminPin');
 
 function defaultMatchCount(format) {
   if (format === 'yellowball' || format === 'scramble') return 1;
@@ -33,7 +34,9 @@ router.post('/setup', async (req, res) => {
 
     updates['tournament/name'] = name;
     updates['tournament/status'] = 'setup';
-    updates['tournament/adminPin'] = adminPin;
+    // PIN is stored outside the client-readable tournament node
+    updates['admin/pin'] = adminPin;
+    updates['tournament/adminPin'] = null;
     updates['tournament/teamA'] = teamA;
     updates['tournament/teamB'] = teamB;
 
@@ -99,12 +102,23 @@ router.get('/status', async (req, res) => {
   }
 });
 
+// POST /api/tournament/verify-pin — check the admin PIN without exposing it.
+// Returns { valid } — valid is true when no tournament/PIN exists yet (setup mode).
+router.post('/verify-pin', async (req, res) => {
+  try {
+    const valid = await verifyPin(req.body?.adminPin);
+    res.json({ valid });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/tournament/reset — wipe all data (requires adminPin)
 router.post('/reset', async (req, res) => {
   try {
     const { adminPin } = req.body;
-    const snap = await db.ref('tournament/adminPin').once('value');
-    if (snap.val() && snap.val() !== adminPin) {
+    if (!(await verifyPin(adminPin))) {
       return res.status(403).json({ error: 'Bad PIN' });
     }
     // Wipe tournament-specific paths only — preserve tournamentArchives
@@ -121,6 +135,7 @@ router.post('/reset', async (req, res) => {
       skinsBets: null,
       course: null,
       activeSessions: null,
+      admin: null,
     });
     res.json({ ok: true });
   } catch (err) {
