@@ -9,16 +9,22 @@
   "theme_color": "#0f0f13",
   "icons": [
     {
+      "src": "/gb-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
       "src": "/gb-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/gb-logo.webp",
-      "sizes": "any",
-      "type": "image/webp",
-      "purpose": "any"
+      "src": "/gb-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
