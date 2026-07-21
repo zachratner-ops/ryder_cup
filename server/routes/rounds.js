@@ -5,9 +5,144 @@ const { verifyPin } = require('../adminPin');
 const { computeStrokeAllocation } = require('../strokeAllocation');
 const { computeMatchResult } = require('../scoring');
 
-// POST /api/rounds/:roundId/start
+// Build the Firebase updates that (re)create a round's matches with the given
+// status ('staged' or 'active'). Any existing matches for the round — e.g. a
+// previous staging — are replaced, along with any stray hole data.
+async function buildMatchUpdates(roundId, round, matchDefs, carrierOrder, matchStatus) {
+  const [playersSnap, courseSnap, existingSnap] = await Promise.all([
+    db.ref('players').once('value'),
+    db.ref('course/holes').once('value'),
+    db.ref('matches').orderByChild('roundId').equalTo(roundId).once('value'),
+  ]);
+
+  const playersMap = playersSnap.val() || {};
+  const holesRaw = courseSnap.val() || {};
+  const courseHoles = Object.entries(holesRaw).map(([num, data]) => ({
+    number: parseInt(num),
+    ...data,
+  }));
+
+  const updates = {};
+  for (const key of Object.keys(existingSnap.val() || {})) {
+    updates[`matches/${key}`] = null;
+    updates[`holes/${key}`] = null;
+  }
+
+  if (carrierOrder) {
+    updates[`rounds/${roundId}/carrierOrder`] = carrierOrder;
+  }
+
+  for (const match of matchDefs) {
+    // Support both { playerIds: [] } and raw array formats
+    const teamAIds = Array.isArray(match.teamA) ? match.teamA : (match.teamA?.playerIds || []);
+    const teamBIds = Array.isArray(match.teamB) ? match.teamB : (match.teamB?.playerIds || []);
+
+    let strokeAllocation;
+    if (round.format === 'scramble') {
+      // Scramble: no handicaps, team gross only
+      strokeAllocation = {};
+    } else if (round.format === 'foursomes') {
+      // Foursomes: one allocation per pair keyed by 'teamA'/'teamB', handicap = combined / 2
+      const combinedHcpA = teamAIds.reduce((s, id) => s + (playersMap[id]?.handicap || 0), 0) / 2;
+      const combinedHcpB = teamBIds.reduce((s, id) => s + (playersMap[id]?.handicap || 0), 0) / 2;
+      strokeAllocation = computeStrokeAllocation(
+        [{ id: 'teamA', combinedHcp: Math.round(combinedHcpA) }, { id: 'teamB', combinedHcp: Math.round(combinedHcpB) }],
+        courseHoles,
+        'foursomes'
+      );
+    } else {
+      const allPlayerIds = [...teamAIds, ...teamBIds];
+      const matchPlayers = allPlayerIds.map((id) => ({ id, ...playersMap[id] }));
+      strokeAllocation = computeStrokeAllocation(matchPlayers, courseHoles, round.format);
+    }
+
+    updates[`matches/${match.matchId}`] = {
+      roundId,
+      format: round.format,
+      teamA: { playerIds: teamAIds },
+      teamB: { playerIds: teamBIds },
+      strokeAllocation,
+      ...(round.format === 'yellowball' && carrierOrder ? { carrierOrder } : {}),
+      ...(round.format === 'scramble' ? { holeCount: round.holeCount === 9 ? 9 : 18 } : {}),
+      status: matchStatus,
+      result: null,
+    };
+  }
+
+  return updates;
+}
+
+// POST /api/rounds/:roundId/stage
 // Body: { adminPin, matches: [{ matchId, teamA: {playerIds}, teamB: {playerIds} }] }
+//       For yellowball: { carrierOrder: { teamA: [...], teamB: [...] } }
+// Saves pairings as staged matches — visible but locked for scoring — so they
+// can be reviewed and edited before the round goes live. Re-staging replaces
+// the previous staging.
+router.post('/:roundId/stage', async (req, res) => {
+  try {
+    const { roundId } = req.params;
+    const { adminPin, matches, carrierOrder } = req.body;
+
+    if (!(await verifyPin(adminPin))) return res.status(403).json({ error: 'Bad PIN' });
+
+    const roundSnap = await db.ref(`rounds/${roundId}`).once('value');
+    const round = roundSnap.val();
+    if (!round) return res.status(404).json({ error: 'Round not found' });
+    if (round.status !== 'setup' && round.status !== 'staged') {
+      return res.status(400).json({ error: 'Round has already started' });
+    }
+    if (!Array.isArray(matches) || !matches.length) {
+      return res.status(400).json({ error: 'No pairings supplied' });
+    }
+
+    const updates = await buildMatchUpdates(roundId, round, matches, carrierOrder, 'staged');
+    updates[`rounds/${roundId}/status`] = 'staged';
+
+    await db.ref().update(updates);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/rounds/:roundId/unstage
+// Body: { adminPin }
+// Deletes the staged matches and returns the round to setup.
+router.post('/:roundId/unstage', async (req, res) => {
+  try {
+    const { roundId } = req.params;
+    const { adminPin } = req.body;
+
+    if (!(await verifyPin(adminPin))) return res.status(403).json({ error: 'Bad PIN' });
+
+    const roundSnap = await db.ref(`rounds/${roundId}`).once('value');
+    const round = roundSnap.val();
+    if (!round) return res.status(404).json({ error: 'Round not found' });
+    if (round.status !== 'staged') return res.status(400).json({ error: 'Round is not staged' });
+
+    const matchesSnap = await db.ref('matches').orderByChild('roundId').equalTo(roundId).once('value');
+    const updates = {};
+    for (const key of Object.keys(matchesSnap.val() || {})) {
+      updates[`matches/${key}`] = null;
+      updates[`holes/${key}`] = null;
+    }
+    updates[`rounds/${roundId}/status`] = 'setup';
+
+    await db.ref().update(updates);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/rounds/:roundId/start
+// Body: { adminPin, matches?: [{ matchId, teamA: {playerIds}, teamB: {playerIds} }] }
 //       For yellowball: { carrierOrder: { teamA: [playerId,...], teamB: [playerId,...] } }
+// With pairings in the body, (re)creates the matches live — replacing any
+// staged ones, so last-minute edits apply. Without pairings, activates the
+// round's previously staged matches as-is.
 router.post('/:roundId/start', async (req, res) => {
   try {
     const { roundId } = req.params;
@@ -19,62 +154,24 @@ router.post('/:roundId/start', async (req, res) => {
     const round = roundSnap.val();
     if (!round) return res.status(404).json({ error: 'Round not found' });
 
-    const [playersSnap, courseSnap] = await Promise.all([
-      db.ref('players').once('value'),
-      db.ref('course/holes').once('value'),
-    ]);
+    let updates;
+    if (Array.isArray(matches) && matches.length) {
+      updates = await buildMatchUpdates(roundId, round, matches, carrierOrder, 'active');
+    } else {
+      // No pairings supplied — promote staged matches
+      const stagedSnap = await db.ref('matches').orderByChild('roundId').equalTo(roundId).once('value');
+      const staged = stagedSnap.val() || {};
+      if (!Object.keys(staged).length) {
+        return res.status(400).json({ error: 'No pairings supplied and no staged matches to start' });
+      }
+      updates = {};
+      for (const key of Object.keys(staged)) {
+        updates[`matches/${key}/status`] = 'active';
+      }
+    }
 
-    const playersMap = playersSnap.val() || {};
-    const holesRaw = courseSnap.val() || {};
-    const courseHoles = Object.entries(holesRaw).map(([num, data]) => ({
-      number: parseInt(num),
-      ...data,
-    }));
-
-    const updates = {};
     updates[`rounds/${roundId}/status`] = 'active';
     updates[`tournament/status`] = 'active';
-
-    if (carrierOrder) {
-      updates[`rounds/${roundId}/carrierOrder`] = carrierOrder;
-    }
-
-    for (const match of matches) {
-      // Support both { playerIds: [] } and raw array formats
-      const teamAIds = Array.isArray(match.teamA) ? match.teamA : (match.teamA?.playerIds || []);
-      const teamBIds = Array.isArray(match.teamB) ? match.teamB : (match.teamB?.playerIds || []);
-
-      let strokeAllocation;
-      if (round.format === 'scramble') {
-        // Scramble: no handicaps, team gross only
-        strokeAllocation = {};
-      } else if (round.format === 'foursomes') {
-        // Foursomes: one allocation per pair keyed by 'teamA'/'teamB', handicap = combined / 2
-        const combinedHcpA = teamAIds.reduce((s, id) => s + (playersMap[id]?.handicap || 0), 0) / 2;
-        const combinedHcpB = teamBIds.reduce((s, id) => s + (playersMap[id]?.handicap || 0), 0) / 2;
-        strokeAllocation = computeStrokeAllocation(
-          [{ id: 'teamA', combinedHcp: Math.round(combinedHcpA) }, { id: 'teamB', combinedHcp: Math.round(combinedHcpB) }],
-          courseHoles,
-          'foursomes'
-        );
-      } else {
-        const allPlayerIds = [...teamAIds, ...teamBIds];
-        const matchPlayers = allPlayerIds.map((id) => ({ id, ...playersMap[id] }));
-        strokeAllocation = computeStrokeAllocation(matchPlayers, courseHoles, round.format);
-      }
-
-      updates[`matches/${match.matchId}`] = {
-        roundId,
-        format: round.format,
-        teamA: { playerIds: teamAIds },
-        teamB: { playerIds: teamBIds },
-        strokeAllocation,
-        ...(round.format === 'yellowball' && carrierOrder ? { carrierOrder } : {}),
-        ...(round.format === 'scramble' ? { holeCount: round.holeCount === 9 ? 9 : 18 } : {}),
-        status: 'active',
-        result: null,
-      };
-    }
 
     await db.ref().update(updates);
     res.json({ ok: true });
@@ -236,7 +333,12 @@ router.post('/:roundId/update', async (req, res) => {
     const roundSnap = await db.ref(`rounds/${roundId}`).once('value');
     const round = roundSnap.val();
     if (!round) return res.status(404).json({ error: 'Round not found' });
-    if (round.status !== 'setup') return res.status(400).json({ error: 'Can only edit rounds in setup status' });
+    if (round.status !== 'setup' && round.status !== 'staged') {
+      return res.status(400).json({ error: 'Can only edit rounds before they start' });
+    }
+    if (round.status === 'staged' && format !== round.format) {
+      return res.status(400).json({ error: 'Unstage the round before changing its format' });
+    }
 
     const pts = parseFloat(pointsValue) || 1;
     const count = (matchCount != null && format !== 'yellowball' && format !== 'scramble')
@@ -272,10 +374,18 @@ router.post('/:roundId/delete', async (req, res) => {
     const roundSnap = await db.ref(`rounds/${roundId}`).once('value');
     const round = roundSnap.val();
     if (!round) return res.status(404).json({ error: 'Round not found' });
-    if (round.status !== 'setup') return res.status(400).json({ error: 'Can only delete rounds in setup status' });
+    if (round.status !== 'setup' && round.status !== 'staged') {
+      return res.status(400).json({ error: 'Can only delete rounds before they start' });
+    }
 
     const updates = {};
     updates[`rounds/${roundId}`] = null;
+    // Remove any staged matches belonging to this round
+    const matchesSnap = await db.ref('matches').orderByChild('roundId').equalTo(roundId).once('value');
+    for (const key of Object.keys(matchesSnap.val() || {})) {
+      updates[`matches/${key}`] = null;
+      updates[`holes/${key}`] = null;
+    }
     // Pass null to exclude this round from recalc
     updates['leaderboard/ptsAvailable'] = await recalcPtsAvailable({ [roundId]: null });
 

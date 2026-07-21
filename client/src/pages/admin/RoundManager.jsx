@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ref, onValue } from 'firebase/database';
 import { db } from '../../firebase';
 import styles from './AdminForms.module.css';
@@ -75,6 +75,30 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
     if (propPin) setAdminPin(propPin);
   }, [propPin]);
 
+  // Pre-fill the pairing editor from staged matches (once per round selection,
+  // so live Firebase updates don't clobber in-progress edits)
+  const stagedLoadedFor = useRef(null);
+  useEffect(() => {
+    const r = selectedRound ? rounds[selectedRound] : null;
+    if (!r || r.status !== 'staged') { stagedLoadedFor.current = null; return; }
+    if (stagedLoadedFor.current === selectedRound) return;
+    const staged = Object.entries(matches).filter(([, m]) => m.roundId === selectedRound);
+    if (!staged.length) return;
+    setPairings(staged.map(([mid, m]) => ({
+      matchId: mid,
+      teamA: { playerIds: [...(m.teamA?.playerIds || [])] },
+      teamB: { playerIds: [...(m.teamB?.playerIds || [])] },
+    })));
+    if (r.format === 'yellowball') {
+      const co = r.carrierOrder || staged[0][1].carrierOrder;
+      if (co) {
+        setCarrierOrderA([0, 1, 2, 3].map(i => co.teamA?.[i] || ''));
+        setCarrierOrderB([0, 1, 2, 3].map(i => co.teamB?.[i] || ''));
+      }
+    }
+    stagedLoadedFor.current = selectedRound;
+  }, [selectedRound, rounds, matches]);
+
   // Sync edit fields when round selection changes
   useEffect(() => {
     const round = selectedRound ? rounds[selectedRound] : null;
@@ -93,6 +117,9 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
   const roundList = Object.entries(rounds).sort(([, a], [, b]) => a.order - b.order);
   const round = selectedRound ? rounds[selectedRound] : null;
   const roundMatches = Object.entries(matches).filter(([, m]) => m.roundId === selectedRound);
+  const isStaged = round?.status === 'staged';
+  // Rounds are editable until they go live
+  const preLive = round?.status === 'setup' || isStaged;
 
   const teamAPlayers = Object.entries(players).filter(([, p]) => p.teamId === 'teamA');
   const teamBPlayers = Object.entries(players).filter(([, p]) => p.teamId === 'teamB');
@@ -131,35 +158,72 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
     }
   }
 
-  async function startRound() {
-    // Strip any empty slot strings before sending
-    const cleanedPairings = pairings.map(p => ({
+  // Strip any empty slot strings before sending
+  function cleanedPairings() {
+    return pairings.map(p => ({
       ...p,
       teamA: { playerIds: p.teamA.playerIds.filter(Boolean) },
       teamB: { playerIds: p.teamB.playerIds.filter(Boolean) },
     }));
-    await call(`/api/rounds/${selectedRound}/start`, { matches: cleanedPairings }, 'Round started!');
+  }
+
+  // Full-team matches (yellow ball / scramble) always use everyone
+  function fullTeamMatch() {
+    return {
+      matchId: `match_${Date.now()}`,
+      teamA: { playerIds: teamAPlayers.map(([id]) => id) },
+      teamB: { playerIds: teamBPlayers.map(([id]) => id) },
+    };
+  }
+
+  async function startRound() {
+    await call(`/api/rounds/${selectedRound}/start`, { matches: cleanedPairings() }, 'Round started!');
     setPairings([]);
+    stagedLoadedFor.current = null;
+  }
+
+  async function stageRound() {
+    await call(`/api/rounds/${selectedRound}/stage`, { matches: cleanedPairings() },
+      'Pairings staged — start the round when ready.');
+    stagedLoadedFor.current = selectedRound;
   }
 
   async function startYellowBall() {
-    const allA = teamAPlayers.map(([id]) => id);
-    const allB = teamBPlayers.map(([id]) => id);
-    const matchId = `match_${Date.now()}`;
     const result = await call(`/api/rounds/${selectedRound}/start`, {
-      matches: [{ matchId, teamA: { playerIds: allA }, teamB: { playerIds: allB } }],
+      matches: [fullTeamMatch()],
       carrierOrder: { teamA: carrierOrderA, teamB: carrierOrderB },
     }, 'Yellow Ball round started!');
     return result;
   }
 
+  async function stageYellowBall() {
+    await call(`/api/rounds/${selectedRound}/stage`, {
+      matches: [fullTeamMatch()],
+      carrierOrder: { teamA: carrierOrderA, teamB: carrierOrderB },
+    }, 'Carrier order staged — start the round when ready.');
+    stagedLoadedFor.current = selectedRound;
+  }
+
   async function startScramble() {
-    const allA = teamAPlayers.map(([id]) => id);
-    const allB = teamBPlayers.map(([id]) => id);
-    const matchId = `match_${Date.now()}`;
     return call(`/api/rounds/${selectedRound}/start`, {
-      matches: [{ matchId, teamA: { playerIds: allA }, teamB: { playerIds: allB } }],
+      matches: [fullTeamMatch()],
     }, 'Scramble round started!');
+  }
+
+  async function stageScramble() {
+    await call(`/api/rounds/${selectedRound}/stage`, {
+      matches: [fullTeamMatch()],
+    }, 'Scramble staged — start the round when ready.');
+    stagedLoadedFor.current = selectedRound;
+  }
+
+  async function unstageRound() {
+    if (!confirm('Unstage this round? Staged pairings will be removed.')) return;
+    const result = await call(`/api/rounds/${selectedRound}/unstage`, {}, 'Round returned to setup.');
+    if (result) {
+      setPairings([]);
+      stagedLoadedFor.current = null;
+    }
   }
 
   function updateCarrierSlot(team, slot, playerId) {
@@ -227,7 +291,10 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
           <button
             key={id}
             className={`${styles.stepBtn} ${selectedRound === id ? styles.stepActive : ''} ${r.status === 'complete' ? styles.stepDone : ''}`}
-            onClick={() => { setSelectedRound(id); setView('manage'); setMsg(''); setShowAdd(false); }}
+            onClick={() => {
+              if (id !== selectedRound) { setPairings([]); stagedLoadedFor.current = null; }
+              setSelectedRound(id); setView('manage'); setMsg(''); setShowAdd(false);
+            }}
           >
             <span>R{r.order} <span style={{ fontSize: 10, opacity: 0.75 }}>{FORMAT_ABBREV[r.format]}</span></span>
             {r.status === 'active' && <span className={styles.tabDot} />}
@@ -365,7 +432,7 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
                 <span className={`${styles.status} ${round.status === 'active' ? styles.live : ''}`}>{round.status}</span>
               </div>
             </div>
-            {round.status === 'setup' && (
+            {preLive && (
               <button
                 className={styles.editToggle}
                 onClick={() => setView((v) => v === 'edit' ? 'manage' : 'edit')}
@@ -375,16 +442,21 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
             )}
           </div>
 
-          {/* Edit round settings (setup only) */}
-          {view === 'edit' && round.status === 'setup' && (
+          {/* Edit round settings (until the round goes live) */}
+          {view === 'edit' && preLive && (
             <>
               <label>Format</label>
               <select
                 value={editFormat}
+                disabled={isStaged}
+                title={isStaged ? 'Unstage the round to change its format' : undefined}
                 onChange={(e) => setEditFormat(e.target.value)}
               >
                 {FORMATS.map((f) => <option key={f} value={f}>{FORMAT_LABELS[f]}</option>)}
               </select>
+              {isStaged && (
+                <p className={styles.ybHint}>Format is locked while staged — unstage to change it.</p>
+              )}
 
               {editFormat === 'scramble' && (
                 <>
@@ -498,9 +570,9 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
                 </>
               )}
 
-              {round.status === 'setup' && round.format === 'scramble' && (
+              {preLive && round.format === 'scramble' && (
                 <>
-                  <div className={styles.pairingsHeader}>⛳ Team Scramble</div>
+                  <div className={styles.pairingsHeader}>⛳ Team Scramble {isStaged ? '· Staged' : ''}</div>
                   <p className={styles.ybHint}>
                     Full-team scramble — everyone plays, one ball per team, no handicaps.
                     One team score per hole over {round.holeCount === 9 ? 9 : 18} holes; lowest total wins.
@@ -519,12 +591,28 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
                   <button className={styles.submitBtn} onClick={startScramble} disabled={busy}>
                     {busy ? 'Starting…' : 'Start Scramble Round'}
                   </button>
+                  {!isStaged && (
+                    <button className={styles.addRound} onClick={stageScramble} disabled={busy}>
+                      {busy ? 'Staging…' : 'Stage (start later)'}
+                    </button>
+                  )}
+                  {isStaged && (
+                    <button className={styles.addRound} onClick={unstageRound} disabled={busy}>
+                      ↩ Unstage
+                    </button>
+                  )}
                 </>
               )}
 
-              {round.status === 'setup' && round.format !== 'yellowball' && round.format !== 'scramble' && (
+              {preLive && round.format !== 'yellowball' && round.format !== 'scramble' && (
                 <>
-                  <div className={styles.pairingsHeader}>Pairings</div>
+                  <div className={styles.pairingsHeader}>Pairings {isStaged ? '· Staged' : ''}</div>
+                  {isStaged && (
+                    <p className={styles.ybHint}>
+                      These pairings are staged but not live — players can see them, scoring is locked.
+                      Edit freely, then start the round.
+                    </p>
+                  )}
                   {(() => {
                     const slotsPerTeam = round.format === 'singles' ? 1 : 2;
                     // Collect every selected player ID so we can hide them from other slots
@@ -566,12 +654,20 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
                   <button className={styles.submitBtn} onClick={startRound} disabled={busy || !pairings.length}>
                     {busy ? 'Starting…' : 'Start Round'}
                   </button>
+                  <button className={styles.addRound} onClick={stageRound} disabled={busy || !pairings.length}>
+                    {busy ? 'Staging…' : isStaged ? 'Save staged pairings' : 'Stage (start later)'}
+                  </button>
+                  {isStaged && (
+                    <button className={styles.addRound} onClick={unstageRound} disabled={busy}>
+                      ↩ Unstage
+                    </button>
+                  )}
                 </>
               )}
 
-              {round.status === 'setup' && round.format === 'yellowball' && (
+              {preLive && round.format === 'yellowball' && (
                 <>
-                  <div className={styles.pairingsHeader}>🟡 Carrier Rotation</div>
+                  <div className={styles.pairingsHeader}>🟡 Carrier Rotation {isStaged ? '· Staged' : ''}</div>
                   <p className={styles.ybHint}>Set the order each team's players carry the yellow ball. Repeats across all 18 holes.</p>
 
                   {[
@@ -603,6 +699,18 @@ export default function RoundManager({ tournament, adminPin: propPin }) {
                   >
                     {busy ? 'Starting…' : 'Start Yellow Ball Round'}
                   </button>
+                  <button
+                    className={styles.addRound}
+                    onClick={stageYellowBall}
+                    disabled={busy || carrierOrderA.some(v => !v) || carrierOrderB.some(v => !v)}
+                  >
+                    {busy ? 'Staging…' : isStaged ? 'Save staged rotation' : 'Stage (start later)'}
+                  </button>
+                  {isStaged && (
+                    <button className={styles.addRound} onClick={unstageRound} disabled={busy}>
+                      ↩ Unstage
+                    </button>
+                  )}
                 </>
               )}
 

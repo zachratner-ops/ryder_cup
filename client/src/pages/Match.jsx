@@ -1216,6 +1216,8 @@ export default function Match({ playerId, isAdmin }) {
   // Admin can always enter scores; regular players only when in the match
   const isMyMatch = isAdmin ? !!effectivePlayerId : allPlayerIds.includes(playerId);
   const roundComplete = match.status === 'complete';
+  // Staged matches are visible but locked — scoring opens when the admin starts the round
+  const matchLive = match.status === 'active';
 
   const myHoleScore = holeData[currentHole]?.[effectivePlayerId];
   const iSubmitted = !!myHoleScore?.gross;
@@ -1821,8 +1823,15 @@ export default function Match({ playerId, isAdmin }) {
         {receiveStroke && !isYellowBall && <span className={styles.strokeDot}>+1 stroke</span>}
       </div>
 
+      {/* Staged notice — pairings are set but the round hasn't started */}
+      {match.status === 'staged' && (
+        <div className={styles.resultBanner}>
+          Pairings are set — scoring opens when the round starts
+        </div>
+      )}
+
       {/* Score entry */}
-      {isMyMatch && !roundComplete && (
+      {isMyMatch && !roundComplete && matchLive && (
         <div className={styles.entryCard}>
           {/* Admin: player/pair picker; or player label for non-admin */}
           {isAdmin && isTeamEntry ? (

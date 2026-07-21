@@ -202,7 +202,7 @@ export default function Leaderboard({ playerId }) {
 
   function isRoundExpanded(roundId) {
     if (expandedRounds[roundId] !== undefined) return expandedRounds[roundId];
-    return rounds[roundId]?.status === 'active';
+    return rounds[roundId]?.status === 'active' || rounds[roundId]?.status === 'staged';
   }
 
   const teamAName = tournament.teamA?.name || 'Northwestern';
@@ -334,7 +334,10 @@ export default function Leaderboard({ playerId }) {
                             <span className={styles.mcAllSquare}>{(isYB || isScr) ? 'Tied' : 'All Square'}</span>
                           )}
                           <span className={styles.mcThruText}>
-                            {holesPlayed > 0 ? `Thru ${holesPlayed}` : match.status === 'active' ? 'Starting' : '—'}
+                            {holesPlayed > 0 ? `Thru ${holesPlayed}`
+                              : match.status === 'active' ? 'Starting'
+                              : match.status === 'staged' ? 'Staged'
+                              : '—'}
                           </span>
                         </div>
 
