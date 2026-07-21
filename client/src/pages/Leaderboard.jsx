@@ -354,6 +354,34 @@ export default function Leaderboard({ playerId }) {
                         </div>
                       </div>
 
+                      {/* Front 9 / Back 9 / Overall status for segment-scored fourball */}
+                      {match.format === 'fourball' && round.segmentPoints && (
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {[['front', 'F9', 1, 9], ['back', 'B9', 10, 18], ['overall', '18', 1, 18]].map(([key, label, startH, endH]) => {
+                            const segPts = round.segmentPoints[key] ?? 0;
+                            const seg = computeSegDiff(matchHoles, startH, endH);
+                            const segTeam = seg.diff > 0 ? 'teamA' : seg.diff < 0 ? 'teamB' : null;
+                            const segTxt = seg.played === 0 ? '—' : seg.diff === 0 ? 'AS' : `${Math.abs(seg.diff)}UP`;
+                            return (
+                              <div
+                                key={key}
+                                style={{
+                                  flex: 1, textAlign: 'center', padding: '4px 2px',
+                                  background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8,
+                                }}
+                              >
+                                <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+                                  {label} · {segPts}pt{segPts !== 1 ? 's' : ''}
+                                </div>
+                                <div style={{ fontSize: 12, fontWeight: 700, marginTop: 1, color: segTeam ? `var(--${segTeam})` : 'var(--text-muted)' }}>
+                                  {segTxt}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
                       <div className={styles.mcHoleStrip}>
                         {Array.from({ length: stripHoles }, (_, i) => i + 1).map((h) => {
                           const winner = matchHoles[h]?.holeWinner;
