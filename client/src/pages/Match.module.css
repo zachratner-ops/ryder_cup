@@ -1026,6 +1026,21 @@
   cursor: pointer;
 }
 
+.betDeleteBtn {
+  background: transparent;
+  border: none;
+  padding: 2px 4px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.betDeleteBtn:active {
+  color: #dc2626;
+}
+
 .resultBanner {
   background: var(--surface);
   border: 1px solid var(--border);

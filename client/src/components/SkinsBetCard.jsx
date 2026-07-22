@@ -24,7 +24,7 @@ const FORMAT_LABEL = {
 
 // holeData: holes for this specific match (holes/{matchId})
 // matches + rounds: optional — if provided, renders a link to the match
-export default function SkinsBetCard({ bet, holeData, players, matches, rounds }) {
+export default function SkinsBetCard({ bet, holeData, players, matches, rounds, onDelete }) {
   const [expanded, setExpanded] = useState(false);
 
   const sh = bet.startHole ?? 1;
@@ -61,7 +61,19 @@ export default function SkinsBetCard({ bet, holeData, players, matches, rounds }
             </Link>
           )}
         </div>
-        <span className={styles.skinsMeta}>{holesPlayed}/{totalHoles} played</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className={styles.skinsMeta}>{holesPlayed}/{totalHoles} played</span>
+          {onDelete && (
+            <button
+              className={styles.skinsDeleteBtn}
+              title="Delete bet"
+              aria-label="Delete bet"
+              onClick={onDelete}
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       <div className={styles.skinsPlayers}>

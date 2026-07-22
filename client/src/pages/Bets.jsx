@@ -121,7 +121,7 @@ function PressRows({ presses, nassauBet, nassauBetId, holeData, players, allPres
 
 // ── Nassau bet card ──────────────────────────────────────────────────────────
 
-function NassauBetCard({ betId, bet, holeData, players, allPresses, playerId, matches, rounds }) {
+function NassauBetCard({ betId, bet, holeData, players, allPresses, playerId, matches, rounds, onDelete }) {
   const componentStatuses = computeNassauStatus(holeData, bet);
   const is2v2 = bet.mode === '2v2';
   const nameA = is2v2
@@ -170,7 +170,19 @@ function NassauBetCard({ betId, bet, holeData, players, allPresses, playerId, ma
             </Link>
           )}
         </div>
-        <div className={styles.nassauMeta}>${bet.amount}/comp</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className={styles.nassauMeta}>${bet.amount}/comp{is2v2 ? ' · 2v2' : ''}</div>
+          {onDelete && (
+            <button
+              className={styles.betDeleteBtn}
+              title="Delete bet"
+              aria-label="Delete bet"
+              onClick={onDelete}
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       <div className={styles.nassauSegments}>
@@ -1040,6 +1052,28 @@ export default function Bets({ playerId }) {
     }
   }
 
+  async function deleteNassauBet(betId) {
+    if (!confirm('Delete this Nassau bet? Any presses on it are removed too. This cannot be undone.')) return;
+    // Nassau bets live under a server-write-only node, so delete via the API
+    try {
+      const res = await fetch(`/api/bets/nassau/${betId}/delete`, { method: 'POST' });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+    } catch (e) {
+      console.error(e);
+      alert(`Delete failed: ${e.message}`);
+    }
+  }
+
+  async function deleteSkinsBet(betId) {
+    if (!confirm('Delete this skins bet? This cannot be undone.')) return;
+    try {
+      await update(ref(db), { [`skinsBets/${betId}`]: null });
+    } catch (e) {
+      console.error(e);
+      alert(`Delete failed: ${e.message}`);
+    }
+  }
+
   useEffect(() => {
     const u1 = onValue(ref(db, 'nassauBets'), (s) => setNassauBets(s.val() || {}));
     const u2 = onValue(ref(db, 'customBets'), (s) => setCustomBets(s.val() || {}));
@@ -1214,6 +1248,7 @@ export default function Bets({ playerId }) {
               playerId={playerId}
               matches={matches}
               rounds={rounds}
+              onDelete={playerId ? () => deleteNassauBet(betId) : null}
             />
           ))
         )}
@@ -1234,6 +1269,7 @@ export default function Bets({ playerId }) {
               players={players}
               matches={matches}
               rounds={rounds}
+              onDelete={playerId ? () => deleteSkinsBet(betId) : null}
             />
           ))
         )}

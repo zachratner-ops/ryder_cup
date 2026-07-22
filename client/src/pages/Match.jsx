@@ -389,6 +389,28 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
     setConfirmPress(null);
   }
 
+  async function deleteNassauBet(betId) {
+    if (!confirm('Delete this Nassau bet? Any presses on it are removed too. This cannot be undone.')) return;
+    // Nassau bets live under a server-write-only node, so delete via the API
+    try {
+      const res = await fetch(`/api/bets/nassau/${betId}/delete`, { method: 'POST' });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+    } catch (e) {
+      console.error(e);
+      alert(`Delete failed: ${e.message}`);
+    }
+  }
+
+  async function deleteSkinsBet(betId) {
+    if (!confirm('Delete this skins bet? This cannot be undone.')) return;
+    try {
+      await set(ref(db, `skinsBets/${betId}`), null);
+    } catch (e) {
+      console.error(e);
+      alert(`Delete failed: ${e.message}`);
+    }
+  }
+
   // Render a press button for a segment (or a press-of-press)
   function renderPressButton(nassauBet, betId, segStatus, startHole, endHole, segment, parentPressId) {
     if (!playerId) return null; // spectator can't press
@@ -494,6 +516,8 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
     const colorA = is2v2 ? 'var(--teamA)' : betTeamColor(players, bet.playerA);
     const colorB = is2v2 ? 'var(--teamB)' : betTeamColor(players, bet.playerB);
 
+    const canManageBets = isAdmin || (playerId && allPlayerIds.includes(playerId));
+
     return (
       <div key={betId} className={styles.nassauCard}>
         <div className={styles.nassauCardHeader}>
@@ -502,7 +526,19 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
             <span className={styles.nassauVs}>vs</span>
             <span style={{ color: colorB }}>{nameB}</span>
           </div>
-          <div className={styles.nassauMeta}>${bet.amount}/comp{is2v2 ? ' · 2v2' : ''} · press {bet.pressThreshold ?? 2}-down</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className={styles.nassauMeta}>${bet.amount}/comp{is2v2 ? ' · 2v2' : ''} · press {bet.pressThreshold ?? 2}-down</div>
+            {canManageBets && (
+              <button
+                className={styles.betDeleteBtn}
+                title="Delete bet"
+                aria-label="Delete bet"
+                onClick={() => deleteNassauBet(betId)}
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
 
         <div className={styles.nassauSegments}>
@@ -790,6 +826,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
           bet={bet}
           holeData={holeData}
           players={players}
+          onDelete={(isAdmin || (playerId && allPlayerIds.includes(playerId))) ? () => deleteSkinsBet(betId) : null}
         />
       ))}
 

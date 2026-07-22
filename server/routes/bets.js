@@ -106,4 +106,29 @@ router.post('/nassau', async (req, res) => {
   }
 });
 
+// POST /api/bets/nassau/:betId/delete
+// Removes a Nassau bet and every press attached to it. Nassau bets live under a
+// server-write-only node, so deletion has to go through the server.
+router.post('/nassau/:betId/delete', async (req, res) => {
+  try {
+    const { betId } = req.params;
+    const betSnap = await db.ref(`nassauBets/${betId}`).once('value');
+    if (!betSnap.val()) return res.status(404).json({ error: 'Bet not found' });
+
+    const pressSnap = await db.ref('presses').once('value');
+    const presses = pressSnap.val() || {};
+
+    const updates = { [`nassauBets/${betId}`]: null };
+    for (const [pid, p] of Object.entries(presses)) {
+      if (p.nassauBetId === betId) updates[`presses/${pid}`] = null;
+    }
+
+    await db.ref().update(updates);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
