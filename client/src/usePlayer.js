@@ -5,6 +5,14 @@ import { ref, set } from 'firebase/database';
 const PLAYER_KEY = 'ryder_playerId';
 const ADMIN_KEY  = 'ryder_isAdmin';
 
+// crypto.randomUUID needs a secure context + modern browser; fall back if absent
+function deviceId() {
+  try {
+    if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
+  } catch { /* fall through */ }
+  return `dev_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
 export function usePlayer() {
   const [playerId, setPlayerIdState] = useState(() => localStorage.getItem(PLAYER_KEY));
   const [isAdmin, setIsAdminState]   = useState(() => localStorage.getItem(ADMIN_KEY) === 'true');
@@ -16,8 +24,8 @@ export function usePlayer() {
     setIsAdminState(false);
     set(ref(db, `activeSessions/${id}`), {
       lastSeen: Date.now(),
-      deviceId: crypto.randomUUID(),
-    });
+      deviceId: deviceId(),
+    }).catch(() => { /* session tracking is best-effort */ });
   }
 
   function activateAdmin() {

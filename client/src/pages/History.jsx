@@ -14,6 +14,7 @@ const FORMAT_LABELS = {
   foursomes: 'Foursomes',
   singles: 'Singles',
   yellowball: 'Yellow Ball',
+  scramble: 'Scramble',
 };
 
 function formatDate(ts) {
@@ -70,20 +71,29 @@ function BettingSection({ archive }) {
   function addBalance(pid, delta) {
     balances[pid] = (balances[pid] || 0) + delta;
   }
+  // 2v2 payouts are team-level; split each side's delta evenly among its members
+  function apply2v2Payout(bet, deltaA, deltaB) {
+    const aIds = bet.teamAIds || [];
+    const bIds = bet.teamBIds || [];
+    if (aIds.length) aIds.forEach((pid) => addBalance(pid, deltaA / aIds.length));
+    if (bIds.length) bIds.forEach((pid) => addBalance(pid, deltaB / bIds.length));
+  }
 
   // Nassau bets
   const nassauResults = nassauBets.map(([betId, bet]) => {
     const holeData = matchHoleData[bet.matchId] || {};
     const componentStatuses = computeNassauStatus(holeData, bet);
     const payout = computeNassauPayout(componentStatuses, bet);
-    Object.entries(payout).forEach(([pid, delta]) => addBalance(pid, delta));
+    if (bet.mode === '2v2') apply2v2Payout(bet, payout['teamA'] || 0, payout['teamB'] || 0);
+    else Object.entries(payout).forEach(([pid, delta]) => addBalance(pid, delta));
 
     // Presses for this bet
     const betPresses = presses.filter((p) => p.nassauBetId === betId && !p.parentPressId);
     const pressResults = betPresses.map((press) => {
       const ps = computeSegmentStatus(holeData, bet, press.startHole, press.endHole);
       const pp = computePressPayout(ps, bet);
-      Object.entries(pp).forEach(([pid, delta]) => addBalance(pid, delta));
+      if (bet.mode === '2v2') apply2v2Payout(bet, pp['teamA'] || 0, pp['teamB'] || 0);
+      else Object.entries(pp).forEach(([pid, delta]) => addBalance(pid, delta));
       return { press, status: ps, payout: pp };
     });
 
@@ -96,9 +106,11 @@ function BettingSection({ archive }) {
     const winners = bet.winners || (bet.winner ? [bet.winner] : []);
     if (bet.status === 'settled' && winners.length) {
       const losers = players.filter((p) => !winners.includes(p));
-      const winAmt = (bet.amount || 0) * losers.length;
-      winners.forEach((p) => addBalance(p, winAmt));
-      losers.forEach((p) => addBalance(p, -bet.amount || 0));
+      if (losers.length > 0) {
+        const winAmt = (bet.amount || 0) * losers.length / winners.length;
+        winners.forEach((p) => addBalance(p, winAmt));
+        losers.forEach((p) => addBalance(p, -(bet.amount || 0)));
+      }
     }
     return { betId, bet, winners };
   });
@@ -106,8 +118,10 @@ function BettingSection({ archive }) {
   const players = archive.players || {};
   const firstName = (pid) => players[pid]?.name?.split(' ')[0] || pid;
 
-  // Sort balances: winners first
-  const balanceList = Object.entries(balances).sort(([, a], [, b]) => b - a);
+  // Sort balances: winners first. Drop any non-player keys (e.g. stray 'teamA').
+  const balanceList = Object.entries(balances)
+    .filter(([pid]) => players[pid])
+    .sort(([, a], [, b]) => b - a);
 
   return (
     <div className={styles.section}>
@@ -130,8 +144,9 @@ function BettingSection({ archive }) {
 
       {/* Nassau bets */}
       {nassauResults.map(({ betId, bet, componentStatuses, pressResults }) => {
-        const nameA = firstName(bet.playerA);
-        const nameB = firstName(bet.playerB);
+        const is2v2 = bet.mode === '2v2';
+        const nameA = is2v2 ? (bet.teamAIds || []).map(firstName).join(' & ') : firstName(bet.playerA);
+        const nameB = is2v2 ? (bet.teamBIds || []).map(firstName).join(' & ') : firstName(bet.playerB);
         return (
           <div key={betId} className={styles.betCard}>
             <div className={styles.betHeader}>
@@ -162,9 +177,9 @@ function BettingSection({ archive }) {
                 </div>
               );
             })}
-            {pressResults.map(({ press, status, payout }, pi) => {
-              const winnerPid = Object.entries(payout).find(([, v]) => v > 0)?.[0];
-              const loserPid  = Object.entries(payout).find(([, v]) => v < 0)?.[0];
+            {pressResults.map(({ press, status }, pi) => {
+              const winnerName = status.winner === 'playerA' ? nameA : status.winner === 'playerB' ? nameB : null;
+              const loserName  = status.winner === 'playerA' ? nameB : status.winner === 'playerB' ? nameA : null;
               return (
                 <div key={pi} className={styles.pressRow}>
                   <span className={styles.pressLabel}>
@@ -173,12 +188,12 @@ function BettingSection({ archive }) {
                   <span className={`${styles.pressStatus} ${status.winner !== 'incomplete' ? styles.pressDecided : ''}`}>
                     {status.winner === 'incomplete' ? 'In progress'
                       : status.winner === 'half' ? 'Halved'
-                      : `${firstName(winnerPid)} wins`}
+                      : `${winnerName} wins`}
                   </span>
-                  {status.winner !== 'incomplete' && winnerPid && (
+                  {status.winner !== 'incomplete' && winnerName && (
                     <div className={styles.betSegPayout}>
-                      <span className={styles.payoutWin}>{firstName(winnerPid)} +${bet.amount}</span>
-                      <span className={styles.payoutLose}>{firstName(loserPid)} -${bet.amount}</span>
+                      <span className={styles.payoutWin}>{winnerName} +${bet.amount}</span>
+                      <span className={styles.payoutLose}>{loserName} -${bet.amount}</span>
                     </div>
                   )}
                 </div>

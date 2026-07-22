@@ -7,6 +7,7 @@ import styles from './Profile.module.css';
 export default function Profile({ playerId, isAdmin, onSelect, onClear, onActivateAdmin }) {
   const [players, setPlayers] = useState({});
   const [activeSessions, setActiveSessions] = useState({});
+  const [tournament, setTournament] = useState(null);
   const [skPin, setSkPin] = useState('');
   const [skError, setSkError] = useState('');
   const navigate = useNavigate();
@@ -14,7 +15,8 @@ export default function Profile({ playerId, isAdmin, onSelect, onClear, onActiva
   useEffect(() => {
     const u1 = onValue(ref(db, 'players'), (s) => setPlayers(s.val() || {}));
     const u2 = onValue(ref(db, 'activeSessions'), (s) => setActiveSessions(s.val() || {}));
-    return () => { u1(); u2(); };
+    const u3 = onValue(ref(db, 'tournament'), (s) => setTournament(s.val()));
+    return () => { u1(); u2(); u3(); };
   }, []);
 
   function handleSelect(id) {
@@ -76,7 +78,7 @@ export default function Profile({ playerId, isAdmin, onSelect, onClear, onActiva
         {[['teamA', teamA], ['teamB', teamB]].map(([teamId, list]) => (
           <div key={teamId} className={styles.team}>
             <div className={`${styles.teamLabel} ${styles[teamId]}`}>
-              {teamId === 'teamA' ? 'Northwestern' : 'Nebraska'}
+              {tournament?.[teamId]?.name || (teamId === 'teamA' ? 'Team A' : 'Team B')}
             </div>
             {list.map(([id, player]) => {
               const isMe = id === playerId;

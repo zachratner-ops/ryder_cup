@@ -221,10 +221,22 @@ router.post('/:roundId/close', async (req, res) => {
     };
 
     // Increment overall leaderboard
-    const lbSnap = await db.ref('leaderboard').once('value');
+    const [lbSnap, allRoundsSnap] = await Promise.all([
+      db.ref('leaderboard').once('value'),
+      db.ref('rounds').once('value'),
+    ]);
     const lb = lbSnap.val() || {};
-    updates['leaderboard/teamA_pts'] = (lb.teamA_pts || 0) + teamA_pts;
-    updates['leaderboard/teamB_pts'] = (lb.teamB_pts || 0) + teamB_pts;
+    const newTeamA = (lb.teamA_pts || 0) + teamA_pts;
+    const newTeamB = (lb.teamB_pts || 0) + teamB_pts;
+    updates['leaderboard/teamA_pts'] = newTeamA;
+    updates['leaderboard/teamB_pts'] = newTeamB;
+
+    // Points remaining = every round's total points minus everything awarded so far
+    const allRounds = allRoundsSnap.val() || {};
+    const totalRoundPts = Object.values(allRounds)
+      .filter((r) => r !== null)
+      .reduce((sum, r) => sum + roundTotalPts(r), 0);
+    updates['leaderboard/ptsAvailable'] = Math.max(0, totalRoundPts - newTeamA - newTeamB);
     updates['leaderboard/lastUpdated'] = Date.now();
 
     await db.ref().update(updates);

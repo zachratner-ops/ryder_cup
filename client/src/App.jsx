@@ -34,15 +34,11 @@ export default function App() {
 
         <Route path="/leaderboard" element={<><Leaderboard playerId={playerId} />{nav}</>} />
 
+        {/* Spectators (no player selected) can view matches read-only;
+            score entry is gated inside Match by isMyMatch. */}
         <Route
           path="/match/:matchId"
-          element={
-            (playerId || isAdmin) ? (
-              <><Match playerId={playerId} isAdmin={isAdmin} />{nav}</>
-            ) : (
-              <Navigate to="/select" replace />
-            )
-          }
+          element={<><Match playerId={playerId} isAdmin={isAdmin} />{nav}</>}
         />
 
         <Route path="/stats" element={<><Stats />{nav}</>} />
