@@ -431,10 +431,12 @@ function CreateBetModal({ players, matches, rounds, playerId, onClose, onCreated
   const [error, setError] = useState('');
 
   // Nassau form state
+  const [nassauMode, setNassauMode] = useState('1v1'); // '1v1' | '2v2'
   const [nassauMatchId, setNassauMatchId] = useState('');
   const [nassauPlayerA, setNassauPlayerA] = useState(playerId || '');
   const [nassauPlayerB, setNassauPlayerB] = useState('');
   const [nassauAmount, setNassauAmount] = useState('');
+  const [pressThreshold, setPressThreshold] = useState(2);
   // Component selection: which of front9/back9/overall are active + optional custom
   const [compFront, setCompFront] = useState(true);
   const [compBack, setCompBack] = useState(true);
@@ -470,14 +472,15 @@ function CreateBetModal({ players, matches, rounds, playerId, onClose, onCreated
   const allPlayerList = Object.entries(players).sort(([, a], [, b]) => a.name.localeCompare(b.name));
 
   async function handleCreateNassau() {
-    if (!nassauMatchId || !nassauPlayerA || !nassauPlayerB || !nassauAmount) {
-      setError('Fill in all fields.');
+    if (!nassauMatchId || !nassauAmount) {
+      setError('Select a match and amount.');
       return;
     }
-    if (nassauPlayerA === nassauPlayerB) {
-      setError('Pick two different players.');
-      return;
+    if (nassauMode === '1v1') {
+      if (!nassauPlayerA || !nassauPlayerB) { setError('Pick both players.'); return; }
+      if (nassauPlayerA === nassauPlayerB) { setError('Pick two different players.'); return; }
     }
+
     // Build components array from selections
     const components = [];
     if (compFront) components.push({ label: 'Front 9', startHole: 1, endHole: 9 });
@@ -490,20 +493,37 @@ function CreateBetModal({ players, matches, rounds, playerId, onClose, onCreated
     }
     if (components.length === 0) { setError('Select at least one component.'); return; }
 
+    const match = matches[nassauMatchId];
+    const body = nassauMode === '2v2'
+      ? {
+          matchId: nassauMatchId,
+          mode: '2v2',
+          playerA: 'teamA',
+          playerB: 'teamB',
+          teamAIds: match?.teamA?.playerIds || [],
+          teamBIds: match?.teamB?.playerIds || [],
+          amount: parseFloat(nassauAmount),
+          components,
+          pressThreshold,
+          createdBy: playerId || 'unknown',
+        }
+      : {
+          matchId: nassauMatchId,
+          playerA: nassauPlayerA,
+          playerB: nassauPlayerB,
+          amount: parseFloat(nassauAmount),
+          components,
+          pressThreshold,
+          createdBy: playerId || 'unknown',
+        };
+
     setLoading(true);
     setError('');
     try {
       const res = await fetch('/api/bets/nassau', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          matchId: nassauMatchId,
-          playerA: nassauPlayerA,
-          playerB: nassauPlayerB,
-          amount: parseFloat(nassauAmount),
-          components,
-          createdBy: playerId || 'unknown',
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create bet');
@@ -578,6 +598,22 @@ function CreateBetModal({ players, matches, rounds, playerId, onClose, onCreated
         {tab === 'nassau' && (
           <>
             <div className={styles.formGroup}>
+              <label className={styles.formLabel}>Format</label>
+              <div className={styles.compCheckboxes}>
+                {['1v1', '2v2'].map(mode => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={`${styles.compBtn} ${nassauMode === mode ? styles.compBtnOn : ''}`}
+                    onClick={() => { setNassauMode(mode); setError(''); }}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className={styles.formGroup}>
               <label className={styles.formLabel}>Match</label>
               <select
                 className={styles.formInput}
@@ -596,34 +632,67 @@ function CreateBetModal({ players, matches, rounds, playerId, onClose, onCreated
               </select>
             </div>
 
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel}>Player A (you)</label>
-              <select
-                className={styles.formInput}
-                value={nassauPlayerA}
-                onChange={(e) => setNassauPlayerA(e.target.value)}
-                disabled={!nassauMatchId}
-              >
-                <option value="">Select player…</option>
-                {playersInMatch.filter(id => id !== nassauPlayerB).map(id => (
-                  <option key={id} value={id}>{players[id]?.name || id}</option>
-                ))}
-              </select>
-            </div>
+            {nassauMode === '1v1' ? (
+              <>
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>Player A (you)</label>
+                  <select
+                    className={styles.formInput}
+                    value={nassauPlayerA}
+                    onChange={(e) => setNassauPlayerA(e.target.value)}
+                    disabled={!nassauMatchId}
+                  >
+                    <option value="">Select player…</option>
+                    {playersInMatch.filter(id => id !== nassauPlayerB).map(id => (
+                      <option key={id} value={id}>{players[id]?.name || id}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>Player B (opponent)</label>
+                  <select
+                    className={styles.formInput}
+                    value={nassauPlayerB}
+                    onChange={(e) => setNassauPlayerB(e.target.value)}
+                    disabled={!nassauMatchId}
+                  >
+                    <option value="">Select player…</option>
+                    {playersInMatch.filter(id => id !== nassauPlayerA).map(id => (
+                      <option key={id} value={id}>{players[id]?.name || id}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            ) : (
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Teams</label>
+                {nassauMatchId ? (
+                  <div style={{ fontSize: 14, color: 'var(--text-muted)', background: 'var(--surface2)', borderRadius: 8, padding: '10px 12px' }}>
+                    {(matches[nassauMatchId]?.teamA?.playerIds || []).map(id => players[id]?.name?.split(' ')[0] || id).join(' & ')}
+                    {' vs '}
+                    {(matches[nassauMatchId]?.teamB?.playerIds || []).map(id => players[id]?.name?.split(' ')[0] || id).join(' & ')}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 14, color: 'var(--text-muted)' }}>Select a match to set the teams.</div>
+                )}
+              </div>
+            )}
 
             <div className={styles.formGroup}>
-              <label className={styles.formLabel}>Player B (opponent)</label>
-              <select
-                className={styles.formInput}
-                value={nassauPlayerB}
-                onChange={(e) => setNassauPlayerB(e.target.value)}
-                disabled={!nassauMatchId}
-              >
-                <option value="">Select player…</option>
-                {playersInMatch.filter(id => id !== nassauPlayerA).map(id => (
-                  <option key={id} value={id}>{players[id]?.name || id}</option>
+              <label className={styles.formLabel}>Press when down</label>
+              <div className={styles.compCheckboxes}>
+                {[1, 2, 3].map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={`${styles.compBtn} ${pressThreshold === n ? styles.compBtnOn : ''}`}
+                    onClick={() => setPressThreshold(n)}
+                  >
+                    {n}-down
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
 
             <div className={styles.formGroup}>

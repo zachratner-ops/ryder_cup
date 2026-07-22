@@ -28,12 +28,19 @@ function SEG_LABEL(seg) {
   return seg === 'front' ? 'Front 9' : seg === 'back' ? 'Back 9' : 'Overall';
 }
 
-/** First unplayed hole within [startHole, endHole] for both playerA and playerB */
-function nextPressStartHole(holeData, playerA, playerB, startHole, endHole) {
+/** First unplayed hole within [startHole, endHole].
+ *  1v1: a hole is played once both players have a gross.
+ *  2v2: a hole is played once its holeWinner is decided. */
+function nextPressStartHole(holeData, bet, startHole, endHole) {
+  const is2v2 = bet.mode === '2v2';
   for (let h = startHole; h <= endHole; h++) {
-    const grossA = holeData?.[h]?.[playerA]?.gross;
-    const grossB = holeData?.[h]?.[playerB]?.gross;
-    if (grossA == null || grossB == null) return h;
+    if (is2v2) {
+      if (holeData?.[h]?.holeWinner == null) return h;
+    } else {
+      const grossA = holeData?.[h]?.[bet.playerA]?.gross;
+      const grossB = holeData?.[h]?.[bet.playerB]?.gross;
+      if (grossA == null || grossB == null) return h;
+    }
   }
   return endHole + 1; // all played, no room to press
 }
@@ -385,13 +392,19 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
   // Render a press button for a segment (or a press-of-press)
   function renderPressButton(nassauBet, betId, segStatus, startHole, endHole, segment, parentPressId) {
     if (!playerId) return null; // spectator can't press
-    const isPlayerA = nassauBet.playerA === playerId;
-    const isPlayerB = nassauBet.playerB === playerId;
+    // 2v2: playerA/playerB are the literal 'teamA'/'teamB' keys, so match on team membership
+    const is2v2 = nassauBet.mode === '2v2';
+    const isPlayerA = is2v2
+      ? (nassauBet.teamAIds || []).includes(playerId)
+      : nassauBet.playerA === playerId;
+    const isPlayerB = is2v2
+      ? (nassauBet.teamBIds || []).includes(playerId)
+      : nassauBet.playerB === playerId;
     if (!isPlayerA && !isPlayerB) return null;
 
     if (!canPress(segStatus, isPlayerA, startHole, endHole, nassauBet.pressThreshold ?? 2)) return null;
 
-    const pressStart = nextPressStartHole(holeData, nassauBet.playerA, nassauBet.playerB, startHole, endHole);
+    const pressStart = nextPressStartHole(holeData, nassauBet, startHole, endHole);
     if (pressStart > endHole) return null;
 
     // Hide button once a press already exists for this context.
