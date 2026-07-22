@@ -231,7 +231,7 @@ function NassauBetCard({ betId, bet, holeData, players, allPresses, playerId, ma
 
 // ── Custom bet card ──────────────────────────────────────────────────────────
 
-function CustomBetCard({ betId, bet, players, onSettle }) {
+function CustomBetCard({ betId, bet, players, onSettle, onReopen, onEdit }) {
   const betPlayerIds = getBetPlayerIds(bet);
   const winnerIds = getBetWinnerIds(bet);
 
@@ -262,12 +262,20 @@ function CustomBetCard({ betId, bet, players, onSettle }) {
           ))}
         </span>
         {bet.status === 'settled' ? (
-          <span className={`${styles.customStatus} ${styles.statusSettled}`}>
-            {settledLabel}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className={`${styles.customStatus} ${styles.statusSettled}`}>
+              {settledLabel}
+            </span>
+            {onReopen && (
+              <button className={styles.editBtn} onClick={() => onReopen(betId)}>Re-open</button>
+            )}
+          </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className={`${styles.customStatus} ${styles.statusOpen}`}>Open</span>
+            {onEdit && (
+              <button className={styles.editBtn} onClick={() => onEdit(betId, bet)}>Edit</button>
+            )}
             <button className={styles.settleBtn} onClick={() => onSettle(betId, bet)}>Settle</button>
           </div>
         )}
@@ -844,6 +852,95 @@ function SettleModal({ betId, bet, players, playerId, onClose }) {
   );
 }
 
+// ── Edit custom bet modal ────────────────────────────────────────────────────
+
+function EditCustomBetModal({ betId, bet, players, onClose }) {
+  const [desc, setDesc] = useState(bet.description || '');
+  const [amount, setAmount] = useState(String(bet.amount ?? ''));
+  const [playerIds, setPlayerIds] = useState(getBetPlayerIds(bet));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const allPlayerList = Object.entries(players).sort(([, a], [, b]) => a.name.localeCompare(b.name));
+
+  function togglePlayer(pid) {
+    setPlayerIds(prev => prev.includes(pid) ? prev.filter(p => p !== pid) : [...prev, pid]);
+  }
+
+  async function handleSave() {
+    if (!desc.trim() || !amount) { setError('Fill in description and amount.'); return; }
+    if (playerIds.length < 2) { setError('Select at least two players.'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      await update(ref(db, `customBets/${betId}`), {
+        description: desc.trim(),
+        amount: parseFloat(amount),
+        players: playerIds,
+      });
+      onClose();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className={styles.overlay} onClick={onClose}>
+      <div className={styles.sheet} onClick={(e) => e.stopPropagation()}>
+        <div className={styles.sheetHandle} />
+        <div className={styles.sheetTitle}>Edit Bet</div>
+
+        <div className={styles.formGroup}>
+          <label className={styles.formLabel}>Bet Description</label>
+          <input
+            className={styles.formInput}
+            type="text"
+            value={desc}
+            onChange={(e) => setDesc(e.target.value)}
+            placeholder="e.g. First birdie of the day"
+          />
+        </div>
+
+        <div className={styles.formGroup}>
+          <label className={styles.formLabel}>Players (select all involved)</label>
+          <div className={styles.compCheckboxes}>
+            {allPlayerList.map(([pid]) => (
+              <button
+                key={pid}
+                type="button"
+                className={`${styles.compBtn} ${playerIds.includes(pid) ? styles.compBtnOn : ''}`}
+                onClick={() => togglePlayer(pid)}
+              >
+                {firstName(players, pid)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className={styles.formGroup}>
+          <label className={styles.formLabel}>$ Amount (per person)</label>
+          <input
+            className={styles.formInput}
+            type="number" min="0" step="1"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="e.g. 10"
+          />
+        </div>
+
+        {error && <p style={{ color: '#dc2626', fontSize: 14, margin: '0 0 12px' }}>{error}</p>}
+
+        <button className={styles.submitBtn} onClick={handleSave} disabled={loading}>
+          {loading ? 'Saving…' : 'Save Changes'}
+        </button>
+        <button className={styles.cancelBtn} onClick={onClose}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Bets page ───────────────────────────────────────────────────────────
 
 export default function Bets({ playerId }) {
@@ -857,6 +954,22 @@ export default function Bets({ playerId }) {
   const [allHoles, setAllHoles] = useState({});
   const [showCreate, setShowCreate] = useState(false);
   const [settlingBet, setSettlingBet] = useState(null); // { betId, bet }
+  const [editingBet, setEditingBet] = useState(null); // { betId, bet }
+
+  async function reopenBet(betId) {
+    try {
+      await update(ref(db, `customBets/${betId}`), {
+        winners: null,
+        winner: null,
+        status: 'open',
+        settledBy: null,
+        settledAt: null,
+      });
+    } catch (e) {
+      console.error(e);
+      alert(`Re-open failed: ${e.message}`);
+    }
+  }
 
   useEffect(() => {
     const u1 = onValue(ref(db, 'nassauBets'), (s) => setNassauBets(s.val() || {}));
@@ -1070,6 +1183,8 @@ export default function Bets({ playerId }) {
               bet={bet}
               players={players}
               onSettle={(id, b) => setSettlingBet({ betId: id, bet: b })}
+              onReopen={reopenBet}
+              onEdit={(id, b) => setEditingBet({ betId: id, bet: b })}
             />
           ))
         )}
@@ -1093,6 +1208,15 @@ export default function Bets({ playerId }) {
           players={players}
           playerId={playerId}
           onClose={() => setSettlingBet(null)}
+        />
+      )}
+
+      {editingBet && (
+        <EditCustomBetModal
+          betId={editingBet.betId}
+          bet={editingBet.bet}
+          players={players}
+          onClose={() => setEditingBet(null)}
         />
       )}
     </div>

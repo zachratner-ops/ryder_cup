@@ -78,6 +78,12 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
   const [settlingBetId, setSettlingBetId] = useState(null);
   const [settleWinners, setSettleWinners] = useState([]);
 
+  // Inline edit state (custom bets)
+  const [editingBetId, setEditingBetId] = useState(null);
+  const [editDesc, setEditDesc] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editPlayerIds, setEditPlayerIds] = useState([]);
+
   function toggleCustomPlayer(id) {
     setCustomPlayerIds(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
   }
@@ -309,6 +315,51 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
     }
     setSettlingBetId(null);
     setSettleWinners([]);
+  }
+
+  async function reopenBet(betId) {
+    try {
+      await update(ref(db, `customBets/${betId}`), {
+        winners: null,
+        winner: null,
+        status: 'open',
+        settledBy: null,
+        settledAt: null,
+      });
+    } catch (e) {
+      console.error(e);
+      alert(`Re-open failed: ${e.message}`);
+    }
+  }
+
+  function startEdit(betId, bet) {
+    setEditingBetId(betId);
+    setSettlingBetId(null);
+    setEditDesc(bet.description || '');
+    setEditAmount(String(bet.amount ?? ''));
+    setEditPlayerIds(getBetPlayerIds(bet));
+  }
+
+  function toggleEditPlayer(id) {
+    setEditPlayerIds(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
+  }
+
+  async function confirmEdit() {
+    if (!editingBetId) return;
+    if (!editDesc.trim() || !editAmount) { alert('Fill in description and amount.'); return; }
+    if (editPlayerIds.length < 2) { alert('Select at least two players.'); return; }
+    try {
+      await update(ref(db, `customBets/${editingBetId}`), {
+        description: editDesc.trim(),
+        amount: parseFloat(editAmount),
+        players: editPlayerIds,
+      });
+    } catch (e) {
+      console.error(e);
+      alert(`Edit failed: ${e.message}`);
+      return;
+    }
+    setEditingBetId(null);
   }
 
   async function handlePress(cfg) {
@@ -564,6 +615,8 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
           ? allTied ? 'Halved' : winnerIds.map(pid => betFirstName(players, pid)).join(' & ') + ' wins'
           : null;
         const isSettling = settlingBetId === betId;
+        const isEditing = editingBetId === betId;
+        const canManage = isAdmin || (playerId && allPlayerIds.includes(playerId));
 
         return (
           <div key={betId} className={styles.customBetCard}>
@@ -581,14 +634,79 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
                 ))}
               </span>
               {bet.status === 'settled' ? (
-                <span className={styles.betStatusSettled}>{settledLabel}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className={styles.betStatusSettled}>{settledLabel}</span>
+                  {canManage && (
+                    <button className={styles.betEditBtn} onClick={() => reopenBet(betId)}>Re-open</button>
+                  )}
+                </div>
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span className={styles.betStatusOpen}>Open</span>
+                  {canManage && !isEditing && (
+                    <button className={styles.betEditBtn} onClick={() => startEdit(betId, bet)}>Edit</button>
+                  )}
                   <button className={styles.betSettleBtn} onClick={() => startSettle(betId)}>Settle</button>
                 </div>
               )}
             </div>
+            {/* Inline edit panel */}
+            {isEditing && (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: 8 }}>
+                  Edit bet
+                </div>
+                <input
+                  style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', fontSize: 14, width: '100%', color: 'var(--text)', boxSizing: 'border-box', marginBottom: 8 }}
+                  type="text"
+                  placeholder="Description"
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                />
+                <input
+                  style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', fontSize: 14, width: '100%', color: 'var(--text)', boxSizing: 'border-box', marginBottom: 8 }}
+                  type="number" min="0" step="1"
+                  placeholder="Amount (per person)"
+                  value={editAmount}
+                  onChange={(e) => setEditAmount(e.target.value)}
+                />
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                  {allPlayerIds.map(pid => {
+                    const on = editPlayerIds.includes(pid);
+                    return (
+                      <button
+                        key={pid}
+                        type="button"
+                        style={{
+                          padding: '6px 14px', borderRadius: 20,
+                          border: `1.5px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
+                          background: on ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'var(--surface2)',
+                          color: on ? 'var(--accent)' : 'var(--text-muted)',
+                          fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                        }}
+                        onClick={() => toggleEditPlayer(pid)}
+                      >
+                        {betFirstName(players, pid)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    style={{ flex: 1, background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 8, padding: '10px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+                    onClick={confirmEdit}
+                  >
+                    Save
+                  </button>
+                  <button
+                    style={{ flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px', fontSize: 14, fontWeight: 600, color: 'var(--text-muted)', cursor: 'pointer' }}
+                    onClick={() => setEditingBetId(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
             {/* Inline settle panel */}
             {isSettling && (
               <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>

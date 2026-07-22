@@ -431,6 +431,21 @@
   background: var(--surface2);
 }
 
+.editBtn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.editBtn:active {
+  background: var(--surface2);
+}
+
 /* ── Modal / bottom sheet ────────────────────────────── */
 
 .overlay {

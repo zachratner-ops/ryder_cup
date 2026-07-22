@@ -1015,6 +1015,17 @@
   cursor: pointer;
 }
 
+.betEditBtn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+}
+
 .resultBanner {
   background: var(--surface);
   border: 1px solid var(--border);
