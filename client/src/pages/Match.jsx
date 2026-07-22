@@ -593,6 +593,19 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
             );
           })}
         </div>
+
+        {/* Press confirm — inline under the bet card it belongs to */}
+        {confirmPress?.nassauBetId === betId && (
+          <div className={styles.pressConfirm}>
+            <span className={styles.pressConfirmText}>
+              Press holes {confirmPress.startHole}–{confirmPress.endHole} · ${bet.amount}?
+            </span>
+            <div className={styles.pressConfirmBtns}>
+              <button className={styles.pressConfirmYes} onClick={() => handlePress(confirmPress)}>Yes</button>
+              <button className={styles.pressConfirmNo} onClick={() => setConfirmPress(null)}>No</button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -779,19 +792,6 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
           players={players}
         />
       ))}
-
-      {/* Press confirm overlay */}
-      {confirmPress && (
-        <div className={styles.pressConfirm}>
-          <span className={styles.pressConfirmText}>
-            Press holes {confirmPress.startHole}–{confirmPress.endHole} · ${nassauBets[confirmPress.nassauBetId]?.amount}?
-          </span>
-          <div className={styles.pressConfirmBtns}>
-            <button className={styles.pressConfirmYes} onClick={() => handlePress(confirmPress)}>Yes</button>
-            <button className={styles.pressConfirmNo} onClick={() => setConfirmPress(null)}>No</button>
-          </div>
-        </div>
-      )}
 
       {/* Create bet modal */}
       {showCreate && (
