@@ -304,6 +304,8 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
       });
     } catch (e) {
       console.error(e);
+      alert(`Settle failed: ${e.message}`);
+      return;
     }
     setSettlingBetId(null);
     setSettleWinners([]);
@@ -324,6 +326,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
       });
     } catch (e) {
       console.error('Press failed:', e);
+      alert(`Press failed: ${e.message}`);
     }
     setConfirmPress(null);
   }

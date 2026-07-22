@@ -774,6 +774,7 @@ function SettleModal({ betId, bet, players, playerId, onClose }) {
       onClose();
     } catch (e) {
       console.error(e);
+      alert(`Settle failed: ${e.message}`);
     } finally {
       setLoading(false);
     }
