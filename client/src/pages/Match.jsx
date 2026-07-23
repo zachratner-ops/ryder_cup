@@ -1451,6 +1451,12 @@ export default function Match({ playerId, isAdmin }) {
       putts: entry.putts !== '' ? parseInt(entry.putts) : null,
     };
 
+    // With this entry, has every score for the hole now been recorded?
+    const updatedHole = { ...(holeData[currentHole] || {}), [effectivePlayerId]: scoreData };
+    const holeNowComplete = isTeamEntry
+      ? (updatedHole.teamA?.gross != null && updatedHole.teamB?.gross != null)
+      : allPlayerIds.every(id => updatedHole[id]?.gross != null);
+
     // Optimistic local update so scorecard reflects the entry immediately
     setHoleData(prev => ({
       ...prev,
@@ -1480,8 +1486,15 @@ export default function Match({ playerId, isAdmin }) {
     setJustSaved(true);
     setTimeout(() => {
       setJustSaved(false);
-      // Admin stays on the same hole so they can move to the next player
-      if (!isAdmin && currentHole < holeCount) setCurrentHole(h => h + 1);
+      if (currentHole >= holeCount) return;
+      if (!isAdmin) {
+        setCurrentHole(h => h + 1);
+      } else if (holeNowComplete) {
+        // Scorekeeper: every score is in — advance and start at the first player
+        setCurrentHole(h => h + 1);
+        setEntryForId(isTeamEntry ? 'teamA' : (allPlayerIds[0] || null));
+      }
+      // Scorekeeper with the hole still incomplete stays put for the next player
     }, 900);
   }
 
