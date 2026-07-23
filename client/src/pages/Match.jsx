@@ -532,7 +532,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
             <span style={{ color: colorB }}>{nameB}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div className={styles.nassauMeta}>${bet.amount}/comp{is2v2 ? ' · 2v2' : ''} · press {bet.pressThreshold ?? 2}-down</div>
+            <div className={styles.nassauMeta}>${bet.amount}/comp{is2v2 ? ' · 2v2 · per person' : ''} · press {bet.pressThreshold ?? 2}-down</div>
             {canManageBets && (
               <button
                 className={styles.betDeleteBtn}
@@ -967,7 +967,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
                 </div>
               </div>
               <div>
-                <div className={styles.sectionLabel}>$ Per Component</div>
+                <div className={styles.sectionLabel}>$ Per Component (per person)</div>
                 <input
                   style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '11px 14px', fontSize: 15, width: '100%', color: 'var(--text)', boxSizing: 'border-box' }}
                   type="number"
@@ -1984,25 +1984,39 @@ export default function Match({ playerId, isAdmin }) {
         <div className={styles.entryCard}>
           {/* Admin: player/pair picker; or player label for non-admin */}
           {isAdmin && isTeamEntry ? (
-            <div className={styles.field}>
+            <div className={styles.field} style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
               <label style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 Entering for
               </label>
-              <select
-                value={entryForId || 'teamA'}
-                onChange={e => setEntryForId(e.target.value)}
-                style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', fontSize: '16px', fontWeight: 600, color: 'var(--text)' }}
-              >
-                <option value="teamA">{tournament?.teamA?.name || 'Team A'}: {match.teamA?.playerIds?.map(id => players[id]?.name?.split(' ')[0]).join(' & ')}</option>
-                <option value="teamB">{tournament?.teamB?.name || 'Team B'}: {match.teamB?.playerIds?.map(id => players[id]?.name?.split(' ')[0]).join(' & ')}</option>
-              </select>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {['teamA', 'teamB'].map(tk => {
+                  const color = tk === 'teamA' ? 'var(--teamA)' : 'var(--teamB)';
+                  const selected = (entryForId || 'teamA') === tk;
+                  const name = tournament?.[tk]?.name || (tk === 'teamA' ? 'Team A' : 'Team B');
+                  return (
+                    <button
+                      key={tk}
+                      type="button"
+                      onClick={() => setEntryForId(tk)}
+                      style={{
+                        padding: '6px 14px', borderRadius: 16, fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                        border: `1.5px solid ${color}`,
+                        background: selected ? color : 'transparent',
+                        color: selected ? '#fff' : color,
+                      }}
+                    >
+                      {name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           ) : isAdmin ? (
-            <div className={styles.field}>
+            <div className={styles.field} style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
               <label style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 Entering for
               </label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                 {allPlayerIds.map(id => {
                   const isTeamA = match.teamA?.playerIds?.includes(id);
                   const color = isTeamA ? 'var(--teamA)' : 'var(--teamB)';
@@ -2013,7 +2027,7 @@ export default function Match({ playerId, isAdmin }) {
                       type="button"
                       onClick={() => setEntryForId(id)}
                       style={{
-                        padding: '8px 16px', borderRadius: 20, fontSize: 15, fontWeight: 700, cursor: 'pointer',
+                        padding: '5px 11px', borderRadius: 14, fontSize: 13, fontWeight: 700, cursor: 'pointer',
                         border: `1.5px solid ${color}`,
                         background: selected ? color : 'transparent',
                         color: selected ? '#fff' : color,

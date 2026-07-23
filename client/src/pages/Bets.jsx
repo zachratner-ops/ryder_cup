@@ -171,7 +171,7 @@ function NassauBetCard({ betId, bet, holeData, players, allPresses, playerId, ma
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div className={styles.nassauMeta}>${bet.amount}/comp{is2v2 ? ' · 2v2' : ''}</div>
+          <div className={styles.nassauMeta}>${bet.amount}/comp{is2v2 ? ' · 2v2 · per person' : ''}</div>
           {onDelete && (
             <button
               className={styles.betDeleteBtn}
@@ -746,7 +746,7 @@ function CreateBetModal({ players, matches, rounds, playerId, onClose, onCreated
             </div>
 
             <div className={styles.formGroup}>
-              <label className={styles.formLabel}>$ Per Component</label>
+              <label className={styles.formLabel}>$ Per Component (per person)</label>
               <input
                 className={styles.formInput}
                 type="number"
@@ -1091,10 +1091,12 @@ export default function Bets({ playerId }) {
     const balances = {};
 
     function apply2v2Payout(bet, deltaA, deltaB) {
+      // Amount is per person: each team member is in for the full component
+      // amount (a $20 2v2 = $20 each, $40 total across the two pairs).
       const aIds = bet.teamAIds || [];
       const bIds = bet.teamBIds || [];
-      if (aIds.length) aIds.forEach(pid => { balances[pid] = (balances[pid] || 0) + deltaA / aIds.length; });
-      if (bIds.length) bIds.forEach(pid => { balances[pid] = (balances[pid] || 0) + deltaB / bIds.length; });
+      aIds.forEach(pid => { balances[pid] = (balances[pid] || 0) + deltaA; });
+      bIds.forEach(pid => { balances[pid] = (balances[pid] || 0) + deltaB; });
     }
 
     // Nassau bets

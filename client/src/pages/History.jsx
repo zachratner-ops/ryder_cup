@@ -72,11 +72,10 @@ function BettingSection({ archive }) {
     balances[pid] = (balances[pid] || 0) + delta;
   }
   // 2v2 payouts are team-level; split each side's delta evenly among its members
+  // Amount is per person: each team member is in for the full component amount.
   function apply2v2Payout(bet, deltaA, deltaB) {
-    const aIds = bet.teamAIds || [];
-    const bIds = bet.teamBIds || [];
-    if (aIds.length) aIds.forEach((pid) => addBalance(pid, deltaA / aIds.length));
-    if (bIds.length) bIds.forEach((pid) => addBalance(pid, deltaB / bIds.length));
+    (bet.teamAIds || []).forEach((pid) => addBalance(pid, deltaA));
+    (bet.teamBIds || []).forEach((pid) => addBalance(pid, deltaB));
   }
 
   // Nassau bets
