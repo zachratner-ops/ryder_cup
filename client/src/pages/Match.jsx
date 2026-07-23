@@ -21,6 +21,18 @@ function betFirstName(players, id) {
   return players[id]?.name?.split(' ')[0] || id;
 }
 
+// Display names for the two sides of a Nassau bet. For 2v2, playerA/playerB are
+// the literal 'teamA'/'teamB' keys, so build the names from the team rosters.
+function betSideNames(players, bet) {
+  if (bet.mode === '2v2') {
+    return {
+      nameA: (bet.teamAIds || []).map((id) => betFirstName(players, id)).join(' & '),
+      nameB: (bet.teamBIds || []).map((id) => betFirstName(players, id)).join(' & '),
+    };
+  }
+  return { nameA: betFirstName(players, bet.playerA), nameB: betFirstName(players, bet.playerB) };
+}
+
 function betTeamColor(players, id) {
   return players[id]?.teamId === 'teamA' ? 'var(--teamA)' : 'var(--teamB)';
 }
@@ -464,18 +476,15 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
     );
     // For segment-level presses (parentPressId = null), they're rendered by renderNassauSegments
     if (childPresses.length === 0) return null;
-    const nameA = betFirstName(players, nassauBet.playerA);
-    const nameB = betFirstName(players, nassauBet.playerB);
+    const { nameA, nameB } = betSideNames(players, nassauBet);
     return (
       <div className={styles.pressRows}>
         {childPresses.map(([pressId, press]) => {
           const segStatus = computeSegmentStatus(holeData, nassauBet, press.startHole, press.endHole);
           const pressDecided = segStatus.winner !== 'incomplete';
           const statusStr = formatSegmentStatus(segStatus, nameA, nameB, press.startHole, press.endHole);
-          const pressWinnerPid = segStatus.winner === 'playerA' ? nassauBet.playerA : segStatus.winner === 'playerB' ? nassauBet.playerB : null;
-          const pressLoserPid = segStatus.winner === 'playerA' ? nassauBet.playerB : segStatus.winner === 'playerB' ? nassauBet.playerA : null;
-          const pressWinnerName = pressWinnerPid ? betFirstName(players, pressWinnerPid) : null;
-          const pressLoserName = pressLoserPid ? betFirstName(players, pressLoserPid) : null;
+          const pressWinnerName = segStatus.winner === 'playerA' ? nameA : segStatus.winner === 'playerB' ? nameB : null;
+          const pressLoserName = segStatus.winner === 'playerA' ? nameB : segStatus.winner === 'playerB' ? nameA : null;
           return (
             <div key={pressId}>
               <div className={styles.pressRow}>
@@ -508,12 +517,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
   function renderNassauCard([betId, bet]) {
     const componentStatuses = computeNassauStatus(holeData, bet);
     const is2v2 = bet.mode === '2v2';
-    const nameA = is2v2
-      ? (bet.teamAIds || []).map(id => players[id]?.name?.split(' ')[0] || id).join(' & ')
-      : betFirstName(players, bet.playerA);
-    const nameB = is2v2
-      ? (bet.teamBIds || []).map(id => players[id]?.name?.split(' ')[0] || id).join(' & ')
-      : betFirstName(players, bet.playerB);
+    const { nameA, nameB } = betSideNames(players, bet);
     const colorA = is2v2 ? 'var(--teamA)' : betTeamColor(players, bet.playerA);
     const colorB = is2v2 ? 'var(--teamB)' : betTeamColor(players, bet.playerB);
 
@@ -555,14 +559,8 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
             // Block: only accent left-bar while in progress; no tinting when decided
             const blockMod = !decided && s.holesPlayed > 0 ? styles.nassauSegBlockInProgress : '';
 
-            const winnerPlayerId =
-              s.winner === 'playerA' ? bet.playerA :
-              s.winner === 'playerB' ? bet.playerB : null;
-            const loserPlayerId =
-              s.winner === 'playerA' ? bet.playerB :
-              s.winner === 'playerB' ? bet.playerA : null;
-            const winnerName = winnerPlayerId ? betFirstName(players, winnerPlayerId) : null;
-            const loserName = loserPlayerId ? betFirstName(players, loserPlayerId) : null;
+            const winnerName = s.winner === 'playerA' ? nameA : s.winner === 'playerB' ? nameB : null;
+            const loserName = s.winner === 'playerA' ? nameB : s.winner === 'playerB' ? nameA : null;
 
             return (
               <div key={label} className={`${styles.nassauSegBlock} ${blockMod}`}>
@@ -595,10 +593,8 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
                       const pressStatus = computeSegmentStatus(holeData, bet, press.startHole, press.endHole);
                       const pressDecided = pressStatus.winner !== 'incomplete';
                       const pressStatusStr = formatSegmentStatus(pressStatus, nameA, nameB, press.startHole, press.endHole);
-                      const pressWinnerPid = pressStatus.winner === 'playerA' ? bet.playerA : pressStatus.winner === 'playerB' ? bet.playerB : null;
-                      const pressLoserPid = pressStatus.winner === 'playerA' ? bet.playerB : pressStatus.winner === 'playerB' ? bet.playerA : null;
-                      const pressWinnerName = pressWinnerPid ? betFirstName(players, pressWinnerPid) : null;
-                      const pressLoserName = pressLoserPid ? betFirstName(players, pressLoserPid) : null;
+                      const pressWinnerName = pressStatus.winner === 'playerA' ? nameA : pressStatus.winner === 'playerB' ? nameB : null;
+                      const pressLoserName = pressStatus.winner === 'playerA' ? nameB : pressStatus.winner === 'playerB' ? nameA : null;
                       return (
                         <div key={pressId}>
                           <div className={styles.pressRow}>
