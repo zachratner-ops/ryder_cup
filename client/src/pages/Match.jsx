@@ -2133,18 +2133,6 @@ export default function Match({ playerId, isAdmin }) {
             ))}
           </div>
 
-          {syncState && !justSaved && (
-            <div className={`${styles.syncIndicator} ${
-              syncState === 'saving' ? styles.syncSaving
-              : syncState === 'synced' ? styles.syncSynced
-              : styles.syncPending
-            }`}>
-              {syncState === 'saving' ? '↑ Saving…'
-               : syncState === 'synced' ? '✓ Synced'
-               : `Offline · ${syncState.pending} pending`}
-            </div>
-          )}
-
           {justSaved ? (
             <div className={styles.savedBanner}>✓ Saved!</div>
           ) : (
@@ -2159,6 +2147,18 @@ export default function Match({ playerId, isAdmin }) {
                 ? `Save Pair Score — Hole ${currentHole}`
                 : `Save${isAdmin ? ` ${players[effectivePlayerId]?.name?.split(' ')[0] ?? ''}'s` : ''} Hole ${currentHole}`}
             </button>
+          )}
+
+          {syncState && !justSaved && (
+            <div className={`${styles.syncIndicator} ${
+              syncState === 'saving' ? styles.syncSaving
+              : syncState === 'synced' ? styles.syncSynced
+              : styles.syncPending
+            }`}>
+              {syncState === 'saving' ? '↑ Saving…'
+               : syncState === 'synced' ? '✓ Synced'
+               : `Offline · ${syncState.pending} pending`}
+            </div>
           )}
 
           {waitingOn.length > 0 && (
