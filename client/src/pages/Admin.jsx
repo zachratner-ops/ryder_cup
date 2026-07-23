@@ -11,6 +11,11 @@ export default function Admin() {
   const [error, setError] = useState('');
   const [tournament, setTournament] = useState(null);
   const [rounds, setRounds] = useState({});
+  // Danger Zone: collapsed by default; destructive actions require typing a phrase
+  const [showDanger, setShowDanger] = useState(false);
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [seedConfirm, setSeedConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     const u1 = onValue(ref(db, 'tournament'), (s) => setTournament(s.val()));
@@ -42,13 +47,18 @@ export default function Admin() {
   }
 
   async function handleSeed() {
-    if (!confirm('Seed test data? This replaces all existing data with a sample tournament (PIN: 1234).')) return;
-    const res = await fetch('/api/seed', { method: 'POST' });
-    if (res.ok) {
-      setPin('1234');
-      setAuthed(true);
-    } else {
-      alert('Seed failed — is the server running?');
+    setBusy(true);
+    try {
+      const res = await fetch('/api/seed', { method: 'POST' });
+      if (res.ok) {
+        setSeedConfirm('');
+        setPin('1234');
+        setAuthed(true);
+      } else {
+        alert('Seed failed — is the server running?');
+      }
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -74,29 +84,35 @@ export default function Admin() {
             {error && <div className={styles.error}>{error}</div>}
             <button type="submit" className={styles.loginBtn}>Enter</button>
           </form>
-          <div className={styles.divider}>or</div>
-          <button className={styles.seedBtn} onClick={handleSeed}>
-            🌱 Seed test data
-          </button>
         </div>
       </div>
     );
   }
 
   async function handleReset() {
-    if (!confirm('Reset tournament? This deletes all data and cannot be undone.')) return;
-    const res = await fetch('/api/tournament/reset', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ adminPin: pin }),
-    });
-    if (res.ok) {
-      setAuthed(false);
-      setPin('');
-    } else {
-      alert('Reset failed');
+    setBusy(true);
+    try {
+      const res = await fetch('/api/tournament/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminPin: pin }),
+      });
+      if (res.ok) {
+        setResetConfirm('');
+        setAuthed(false);
+        setPin('');
+      } else {
+        alert('Reset failed');
+      }
+    } finally {
+      setBusy(false);
     }
   }
+
+  // Reset requires typing the tournament name (or "RESET" before setup)
+  const resetPhrase = tournament?.name?.trim() || 'RESET';
+  const resetArmed = resetConfirm.trim().toLowerCase() === resetPhrase.toLowerCase();
+  const seedArmed = seedConfirm.trim().toUpperCase() === 'SEED';
 
   async function handleArchive() {
     if (!confirm('Archive this tournament and start fresh?\n\nResults will be saved to History, then all current data will be wiped.')) return;
@@ -128,27 +144,91 @@ export default function Admin() {
         <RoundManager tournament={tournament} adminPin={pin} />
       )}
 
-      {hasActiveRound && (
-        <div className={styles.activeRoundWarning}>
-          ⚠️ Close active round before resetting
-        </div>
+      {tournament?.name && (
+        <>
+          {hasActiveRound && (
+            <div className={styles.activeRoundWarning}>
+              ⚠️ Close active round before archiving
+            </div>
+          )}
+          <button
+            className={styles.archiveBtn}
+            onClick={handleArchive}
+            disabled={hasActiveRound}
+          >
+            📜 Archive &amp; Start New Tournament
+          </button>
+        </>
       )}
 
+      {/* Danger Zone — collapsed by default; destructive actions need a typed phrase */}
       <button
-        className={styles.archiveBtn}
-        onClick={handleArchive}
-        disabled={hasActiveRound}
+        type="button"
+        className={styles.dangerToggle}
+        onClick={() => setShowDanger((v) => !v)}
       >
-        📜 Archive &amp; Start New Tournament
+        {showDanger ? '▾' : '▸'} Danger Zone
       </button>
 
-      <button
-        className={styles.resetBtn}
-        onClick={handleReset}
-        disabled={hasActiveRound}
-      >
-        Reset Tournament (no archive)
-      </button>
+      {showDanger && (
+        <div className={styles.dangerZone}>
+          <p className={styles.dangerIntro}>
+            These actions permanently erase data. They can't be undone.
+          </p>
+
+          {/* Reset */}
+          <div className={styles.dangerItem}>
+            <div className={styles.dangerItemTitle}>Reset tournament (no archive)</div>
+            <p className={styles.dangerItemDesc}>
+              Deletes everything without saving to History.{' '}
+              {hasActiveRound
+                ? 'Close the active round first.'
+                : <>Type <strong>{resetPhrase}</strong> to confirm.</>}
+            </p>
+            {!hasActiveRound && (
+              <input
+                className={styles.dangerInput}
+                value={resetConfirm}
+                onChange={(e) => setResetConfirm(e.target.value)}
+                placeholder={resetPhrase}
+                autoCapitalize="none"
+                autoCorrect="off"
+              />
+            )}
+            <button
+              className={styles.resetBtn}
+              onClick={handleReset}
+              disabled={hasActiveRound || !resetArmed || busy}
+            >
+              {busy ? 'Working…' : 'Reset Tournament'}
+            </button>
+          </div>
+
+          {/* Seed */}
+          <div className={styles.dangerItem}>
+            <div className={styles.dangerItemTitle}>Load test data (seed)</div>
+            <p className={styles.dangerItemDesc}>
+              Replaces all data with a sample tournament (PIN 1234). For testing only.
+              Type <strong>SEED</strong> to confirm.
+            </p>
+            <input
+              className={styles.dangerInput}
+              value={seedConfirm}
+              onChange={(e) => setSeedConfirm(e.target.value)}
+              placeholder="SEED"
+              autoCapitalize="characters"
+              autoCorrect="off"
+            />
+            <button
+              className={styles.resetBtn}
+              onClick={handleSeed}
+              disabled={!seedArmed || busy}
+            >
+              {busy ? 'Working…' : '🌱 Load Test Data'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

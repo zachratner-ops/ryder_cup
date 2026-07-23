@@ -13,6 +13,7 @@ import {
   formatSegmentStatus,
 } from '../nassauCompute';
 import SkinsBetCard from '../components/SkinsBetCard';
+import { computeMatchStatus } from '../holeWinner';
 
 // ── helpers shared by MatchBetsTab ──────────────────────────────────────────
 
@@ -1129,25 +1130,6 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
 
 // ── Main match computations ──────────────────────────────────────────────────
 
-function computeMatchStatus(holeResults, teamAIds, teamBIds) {
-  let diff = 0;
-  let holesPlayed = 0;
-  for (let h = 1; h <= 18; h++) {
-    const hole = holeResults?.[h];
-    if (!hole?.holeWinner) continue;
-    holesPlayed++;
-    if (hole.holeWinner === 'teamA') diff++;
-    else if (hole.holeWinner === 'teamB') diff--;
-    // Detect match decided: leading margin exceeds holes remaining
-    const margin = Math.abs(diff);
-    const remaining = 18 - holesPlayed;
-    if (margin > remaining) return `${margin}&${remaining}`;
-  }
-  if (holesPlayed === 0) return 'All Square';
-  if (diff === 0) return `All Square thru ${holesPlayed}`;
-  const margin = Math.abs(diff);
-  return `${margin}UP thru ${holesPlayed}`;
-}
 
 export default function Match({ playerId, isAdmin }) {
   const { matchId } = useParams();

@@ -1,8 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { ref, onValue } from 'firebase/database';
-import { db } from './firebase';
 import { usePlayer } from './usePlayer';
+import { useOfflineSync } from './useOfflineSync';
+import ConnectivityBanner from './components/ConnectivityBanner';
 import PlayerSelect from './pages/PlayerSelect';
 import Home from './pages/Home';
 import Leaderboard from './pages/Leaderboard';
@@ -16,17 +15,13 @@ import Nav from './components/Nav';
 
 export default function App() {
   const { playerId, isAdmin, selectPlayer, activateAdmin, clearPlayer } = usePlayer();
-  const [players, setPlayers] = useState({});
-
-  useEffect(() => {
-    const u = onValue(ref(db, 'players'), (s) => setPlayers(s.val() || {}));
-    return u;
-  }, []);
+  const { online, pending, flushing } = useOfflineSync();
 
   const nav = <Nav />;
 
   return (
     <BrowserRouter>
+      <ConnectivityBanner online={online} pending={pending} flushing={flushing} />
       <Routes>
         <Route path="/select" element={<PlayerSelect onSelect={selectPlayer} />} />
 

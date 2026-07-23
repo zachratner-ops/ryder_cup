@@ -1,0 +1,44 @@
+.banner {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: calc(env(safe-area-inset-top) + 7px) 14px 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.offline { background: #6b6b80; }
+.syncing { background: #ca8a04; }
+.pending { background: #ca8a04; }
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.syncing .dot,
+.pending .dot {
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; }
+  50%      { opacity: 1; }
+}
+
+.text {
+  line-height: 1.3;
+}

@@ -175,3 +175,67 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+.resetBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Danger Zone ─────────────────────────────────────── */
+
+.dangerToggle {
+  margin-top: 24px;
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+.dangerZone {
+  margin-top: 8px;
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: color-mix(in srgb, #dc2626 4%, transparent);
+}
+
+.dangerIntro {
+  font-size: 12px;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.dangerItem {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dangerItemTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.dangerItemDesc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.dangerInput {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 14px;
+  color: var(--text);
+}
