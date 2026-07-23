@@ -2002,20 +2002,28 @@ export default function Match({ playerId, isAdmin }) {
               <label style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 Entering for
               </label>
-              <select
-                value={entryForId || ''}
-                onChange={e => setEntryForId(e.target.value)}
-                style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', fontSize: '16px', fontWeight: 600, color: 'var(--text)', maxWidth: '180px' }}
-              >
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {allPlayerIds.map(id => {
                   const isTeamA = match.teamA?.playerIds?.includes(id);
+                  const color = isTeamA ? 'var(--teamA)' : 'var(--teamB)';
+                  const selected = entryForId === id;
                   return (
-                    <option key={id} value={id}>
-                      {players[id]?.name || id} ({isTeamA ? tournament?.teamA?.name || 'A' : tournament?.teamB?.name || 'B'})
-                    </option>
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setEntryForId(id)}
+                      style={{
+                        padding: '8px 16px', borderRadius: 20, fontSize: 15, fontWeight: 700, cursor: 'pointer',
+                        border: `1.5px solid ${color}`,
+                        background: selected ? color : 'transparent',
+                        color: selected ? '#fff' : color,
+                      }}
+                    >
+                      {players[id]?.name?.split(' ')[0] || id}
+                    </button>
                   );
                 })}
-              </select>
+              </div>
             </div>
           ) : isScramble ? (
             <div className={styles.entryLabel}>
