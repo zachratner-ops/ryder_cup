@@ -4,6 +4,11 @@ import { ref, onValue } from 'firebase/database';
 import { db } from '../firebase';
 import styles from './Profile.module.css';
 
+// Score Keeper is a low-stakes convenience role (enter scores for any player),
+// separate from the admin PIN that gates round management + the Danger Zone.
+// This is an openly-shared group PIN, so it's checked client-side.
+const SCOREKEEPER_PIN = '1234';
+
 export default function Profile({ playerId, isAdmin, onSelect, onClear, onActivateAdmin }) {
   const [players, setPlayers] = useState({});
   const [activeSessions, setActiveSessions] = useState({});
@@ -29,22 +34,11 @@ export default function Profile({ playerId, isAdmin, onSelect, onClear, onActiva
     navigate('/');
   }
 
-  async function handleActivateAdmin(e) {
+  function handleActivateAdmin(e) {
     e.preventDefault();
     setSkError('');
-    try {
-      const res = await fetch('/api/tournament/verify-pin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adminPin: skPin }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.valid) {
-        setSkError('Wrong PIN');
-        return;
-      }
-    } catch {
-      setSkError('Could not reach server');
+    if (skPin.trim() !== SCOREKEEPER_PIN) {
+      setSkError('Wrong PIN');
       return;
     }
     onActivateAdmin();
@@ -114,12 +108,12 @@ export default function Profile({ playerId, isAdmin, onSelect, onClear, onActiva
           </div>
         ) : (
           <form onSubmit={handleActivateAdmin} className={styles.skForm}>
-            <p className={styles.skHint}>Enter the admin PIN to score for any player.</p>
+            <p className={styles.skHint}>Enter the Score Keeper PIN to score for any player.</p>
             <div className={styles.skRow}>
               <input
                 type="password"
                 inputMode="numeric"
-                placeholder="Admin PIN"
+                placeholder="Score Keeper PIN"
                 value={skPin}
                 onChange={e => { setSkPin(e.target.value); setSkError(''); }}
                 className={styles.skPinInput}
