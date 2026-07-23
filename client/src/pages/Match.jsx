@@ -391,7 +391,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
         segment: cfg.segment || null,
         startHole: cfg.startHole,
         endHole: cfg.endHole,
-        presserPlayerId: playerId || 'unknown',
+        presserPlayerId: cfg.presserPlayerId || playerId || 'unknown',
         status: 'active',
         createdAt: Date.now(),
       });
@@ -426,18 +426,28 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
 
   // Render a press button for a segment (or a press-of-press)
   function renderPressButton(nassauBet, betId, segStatus, startHole, endHole, segment, parentPressId) {
-    if (!playerId) return null; // spectator can't press
+    const isScorekeeper = isAdmin && !playerId;
+    if (!playerId && !isScorekeeper) return null; // spectator can't press
+
     // 2v2: playerA/playerB are the literal 'teamA'/'teamB' keys, so match on team membership
     const is2v2 = nassauBet.mode === '2v2';
-    const isPlayerA = is2v2
-      ? (nassauBet.teamAIds || []).includes(playerId)
-      : nassauBet.playerA === playerId;
-    const isPlayerB = is2v2
-      ? (nassauBet.teamBIds || []).includes(playerId)
-      : nassauBet.playerB === playerId;
-    if (!isPlayerA && !isPlayerB) return null;
+    let presserIsPlayerA, presserPid;
+    if (isScorekeeper) {
+      // Scorekeeper presses on behalf of whichever side is trailing (diff<0 → A behind)
+      if (segStatus.diff === 0) return null;
+      presserIsPlayerA = segStatus.diff < 0;
+      presserPid = is2v2
+        ? (presserIsPlayerA ? (nassauBet.teamAIds || [])[0] : (nassauBet.teamBIds || [])[0])
+        : (presserIsPlayerA ? nassauBet.playerA : nassauBet.playerB);
+    } else {
+      const isPlayerA = is2v2 ? (nassauBet.teamAIds || []).includes(playerId) : nassauBet.playerA === playerId;
+      const isPlayerB = is2v2 ? (nassauBet.teamBIds || []).includes(playerId) : nassauBet.playerB === playerId;
+      if (!isPlayerA && !isPlayerB) return null;
+      presserIsPlayerA = isPlayerA;
+      presserPid = playerId;
+    }
 
-    if (!canPress(segStatus, isPlayerA, startHole, endHole, nassauBet.pressThreshold ?? 2)) return null;
+    if (!canPress(segStatus, presserIsPlayerA, startHole, endHole, nassauBet.pressThreshold ?? 2)) return null;
 
     const pressStart = nextPressStartHole(holeData, nassauBet, startHole, endHole);
     if (pressStart > endHole) return null;
@@ -457,7 +467,7 @@ function MatchBetsTab({ matchId, holeData, players, nassauBets, customBets, skin
     });
     if (existingPress) return null;
 
-    const cfg = { nassauBetId: betId, startHole: pressStart, endHole, segment, parentPressId: parentPressId || null };
+    const cfg = { nassauBetId: betId, startHole: pressStart, endHole, segment, parentPressId: parentPressId || null, presserPlayerId: presserPid };
 
     return (
       <button
@@ -1810,7 +1820,7 @@ export default function Match({ playerId, isAdmin }) {
   function renderScrambleScorecard() {
     const teamAName = tournament?.teamA?.name || 'Team A';
     const teamBName = tournament?.teamB?.name || 'Team B';
-    const gridStyle = { gridTemplateColumns: '28px 1fr 1fr 40px' };
+    const gridStyle = { gridTemplateColumns: '28px 1fr 1fr 26px 40px' };
 
     let cumA = 0, cumB = 0;
     for (let h = 1; h <= holeCount; h++) {
@@ -1827,11 +1837,13 @@ export default function Match({ playerId, isAdmin }) {
           <span style={{ textAlign: 'center', color: 'var(--teamA)', fontWeight: 700, fontSize: '13px' }}>{teamAName}</span>
           <span style={{ textAlign: 'center', color: 'var(--teamB)', fontWeight: 700, fontSize: '13px' }}>{teamBName}</span>
           <span />
+          <span />
         </div>
 
         {Array.from({ length: holeCount }, (_, i) => i + 1).map(h => {
           const hd = holeData[h] || {};
           const holePar = courseHoles[h]?.par;
+          const winner = hd.holeWinner;
 
           // Running cumulative diff through this hole
           let runA = 0, runB = 0;
@@ -1860,6 +1872,9 @@ export default function Match({ playerId, isAdmin }) {
                   <span className={styles.dotSlot} />
                 </span>
               ))}
+              <span className={styles.scWinner}>
+                {winner === 'half' ? <span className={styles.halfMark}>½</span> : winner ? <TeamLogo teamId={winner} size={18} /> : null}
+              </span>
               <span style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: diffColor, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {diffLabel}
               </span>
@@ -1877,6 +1892,7 @@ export default function Match({ playerId, isAdmin }) {
               <span className={styles.dotSlot} />
             </span>
           ))}
+          <span />
           <span style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: totalDiff < 0 ? 'var(--teamA)' : totalDiff > 0 ? 'var(--teamB)' : 'var(--text-muted)' }}>
             {cumA === 0 && cumB === 0 ? '' : totalDiff === 0 ? 'E' : `${Math.abs(totalDiff)} up`}
           </span>
